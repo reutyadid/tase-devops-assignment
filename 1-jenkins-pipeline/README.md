@@ -51,4 +51,7 @@ See [DECISIONS.md](DECISIONS.md). Key points:
   copies the Compose files and manages secrets (e.g. Ansible Vault). Jenkins itself is still
   configured by JCasC + Job DSL (see D-007). Ansible was left out of this task on purpose: it
   would only wrap `docker compose up` and add a prerequisite for the reviewer.
+- **Internal proxy for downloads.** Here `mvnw` downloads Maven and dependencies directly from
+  Maven Central (checksum-verified, see D-008). In production: route them through an internal
+  proxy repository (e.g. Nexus, `MVNW_REPOURL` + a `settings.xml` mirror).
 - ...

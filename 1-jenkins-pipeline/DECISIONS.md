@@ -281,8 +281,14 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Decision:**
   - **Java 21** for the controller, the agent and the app (`maven.compiler.release=21`).
   - **Maven 3.10.0** (latest stable; Maven 4 is still a preview "not safe for production").
-  - Maven is provided by the **Maven Wrapper** (`mvnw`, type `only-script`), committed in
-    `app/`, with `distributionSha256Sum` to verify the downloaded Maven.
+  - Maven is provided by the **Maven Wrapper** (`mvnw`), committed in `app/`, type `source`.
+    Both downloads are verified: `wrapperSha256Sum` (the wrapper jar) and
+    `distributionSha256Sum` (the Maven zip).
+  - Why type `source` (see T-001): `only-script` downloads `.zip` or `.tar.gz` depending on
+    whether `unzip` exists, but takes one checksum; `script` needs `curl`/`wget` to fetch the
+    wrapper jar. The agent image has none of these tools. With `source`, a small committed Java
+    file (`MavenWrapperDownloader.java`) fetches the wrapper jar, and the jar downloads and
+    unpacks the zip in Java — same file and checksum everywhere, no binary in git.
   - A Docker volume for the agent's `~/.m2` caches Maven and dependencies between builds.
 - **Options considered (Maven on the agent):**
   1. Maven Wrapper — no custom agent image; same Maven version for me, the reviewer and CI;
@@ -293,8 +299,9 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Why:** One Java version removes "works on my machine" problems. Java 21 is the most widely
   adopted LTS and is supported by Jenkins until Sep 2027. The wrapper pins the Maven version in
   the repo, next to the code it builds.
-- **Note:** No Java/Maven is installed in my WSL. The wrapper is generated and local tests run
-  with the official `maven` Docker image — nothing to install on the host.
+- **Note:** No Java/Maven is installed in my WSL. The wrapper is generated once with the
+  official `maven` Docker image; local builds and tests run on the agent image
+  (`jenkins/ssh-agent:9.3.2-jdk21`), so they exercise exactly what CI runs (command in T-001).
 - **Trade-offs:** Java 25 has a longer support window (Jenkins until Sep 2029) but less tooling
   maturity today.
 - **Sources:**
