@@ -1,1 +1,4 @@
 * text=auto eol=lf
+# Windows batch files need CRLF, otherwise cmd.exe can misread them (e.g. mvnw.cmd).
+*.cmd text eol=crlf
+*.bat text eol=crlf
