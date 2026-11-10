@@ -150,6 +150,9 @@ Each significant decision gets one entry. Newest at the bottom.
 
   - All 7 are printed in the Prepare stage log.
   - 6 are embedded in `MANIFEST.MF` (all except `SCM_MESSAGE`: free text, can be multi-line).
+    Maven reads them as `${env.SCM_*}`. In a local build without these env vars the literal
+    text `${env.SCM_*}` stays in the manifest; this is accepted, because only CI deploys.
+  - The manifest also gets `Main-Class`, so the jar runs with `java -jar` (a simple smoke test).
   - Build description: `<short sha> by <committer>`, e.g. `9f3c2a1 by Reut Yadid`,
     set at the end of `prepareEnv` with `currentBuild.description`.
 - **Why:**

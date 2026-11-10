@@ -6,10 +6,13 @@
 
   <groupId>com.example</groupId>
   <artifactId>hello-app</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <!-- CI-friendly version (D-009): CI passes -Drevision=1.0.<build number>. -->
+  <version>${revision}</version>
   <packaging>jar</packaging>
 
   <properties>
+    <!-- Default for local builds; CI always overrides it with -Drevision (D-009). -->
+    <revision>1.0.0-SNAPSHOT</revision>
     <!-- Compile for Java 21 bytecode and API, whatever JDK runs the build (D-008). -->
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -66,5 +69,57 @@
         </plugin>
       </plugins>
     </pluginManagement>
+
+    <plugins>
+      <!-- Writes .flattened-pom.xml with ${revision} replaced by the real version;
+           that file is the POM installed/deployed. Required for CI-friendly versions in Maven 3 (D-009). -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>flatten-maven-plugin</artifactId>
+        <version>1.8.0</version>
+        <configuration>
+          <updatePomFile>true</updatePomFile>
+          <flattenMode>resolveCiFriendliesOnly</flattenMode>
+        </configuration>
+        <executions>
+          <execution>
+            <id>flatten</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>flatten</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>flatten-clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Manifest: runnable jar + SCM trigger parameters set by prepareEnv (D-004).
+           Maven reads the env vars directly; no shell is involved (D-001). -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.example.app.App</mainClass>
+            </manifest>
+            <manifestEntries>
+              <SCM-Branch>${env.SCM_BRANCH}</SCM-Branch>
+              <SCM-Commit>${env.SCM_COMMIT}</SCM-Commit>
+              <SCM-Committer>${env.SCM_COMMITTER}</SCM-Committer>
+              <SCM-Author>${env.SCM_AUTHOR}</SCM-Author>
+              <SCM-Pusher>${env.SCM_PUSHER}</SCM-Pusher>
+              <SCM-Repo>${env.SCM_REPO}</SCM-Repo>
+            </manifestEntries>
+          </archive>
+        </configuration>
+      </plugin>
+    </plugins>
   </build>
 </project>

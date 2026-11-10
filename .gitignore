@@ -5,8 +5,9 @@ __pycache__/
 dist/
 build/
 target/
+.flattened-pom.xml
 # Maven Wrapper (type "source"): downloaded / compiled at runtime by mvnw
-.mvn/wrapper/maven-wrapper.jar
-.mvn/wrapper/*.class
+**/.mvn/wrapper/maven-wrapper.jar
+**/.mvn/wrapper/*.class
 *.tar.gz
 .vscode/

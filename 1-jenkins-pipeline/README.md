@@ -54,4 +54,6 @@ See [DECISIONS.md](DECISIONS.md). Key points:
 - **Internal proxy for downloads.** Here `mvnw` downloads Maven and dependencies directly from
   Maven Central (checksum-verified, see D-008). In production: route them through an internal
   proxy repository (e.g. Nexus, `MVNW_REPOURL` + a `settings.xml` mirror).
+- **Build metadata.** Fail the build if an `SCM_*` value is missing (Maven Enforcer) and publish
+  signed build provenance (SLSA). Here, local builds leave `${env.SCM_*}` as text in the manifest.
 - ...
