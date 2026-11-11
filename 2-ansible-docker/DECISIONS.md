@@ -276,14 +276,31 @@ Each significant decision gets one entry. Newest at the bottom.
   3. pipx — isolated, but must be installed first, and adding `ansible-lint` next to it is harder.
   4. The full `ansible` package — hundreds of collections; the `community.docker` version is
      chosen by the package, not by us.
-- **Decision:** Option 1. `ansible-core==2.21.6` in `requirements.txt` (the latest 2.22 needs
-  Python >= 3.13). Lint tools (`ansible-lint`, `yamllint`) go in `requirements-dev.txt`
-  because the reviewer does not need them to run the playbook. `.venv/` is git-ignored.
-- **Why:** Reproducible versions with no root access.
-- **Trade-offs:** Three one-time setup commands in the README.
+- **Decision:** Option 1. `ansible-core==2.21.6` (the latest 2.22 needs Python >= 3.13).
+  Lint tools (`ansible-lint`, `yamllint`) go in `requirements-dev.txt` because the reviewer
+  does not need them to run the playbook. `.venv/` is git-ignored.
+- **Pinning level:** The full environment is pinned, not only direct dependencies.
+  1. Direct only (`ansible-core==2.21.6`) — the right style for a library, but a later install
+     can pull newer, untested versions of Jinja2, cryptography, etc.
+  2. Full environment — `requirements.txt` is the `pip freeze` output of the tested venv.
+     Python Packaging docs: requirements files for an environment "often contain an
+     exhaustive listing of pinned versions".
+  3. Full environment + hashes (`--require-hashes`) — also protects against a replaced
+     package on PyPI; more tooling than this task needs.
+
+  Chosen: level 2. `ansible-galaxy` has no lock file, so `requirements.yml` pins
+  `community.docker` and also its dependency `community.library_inventory_filtering_v1`.
+- **Why:** Reproducible versions with no root access: the reviewer installs exactly what was
+  tested.
+- **Trade-offs:** Three one-time setup commands in the README. Upgrading means regenerating
+  `requirements.txt` with `pip freeze`.
+- **What I would do in production:** Keep direct dependencies in `requirements.in` and generate
+  a hashed `requirements.txt` with `pip-tools` (or `uv`), updated by a bot such as Dependabot.
 - **Sources:**
   - https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html
   - https://pypi.org/project/ansible-core/
+  - https://pip.pypa.io/en/stable/topics/repeatable-installs/
+  - https://packaging.python.org/en/latest/discussions/install-requires-vs-requirements/
 
 ---
 
@@ -296,8 +313,11 @@ Each significant decision gets one entry. Newest at the bottom.
   2. A Makefile (`make deploy`) — one more tool and file; `make` is not always installed.
 - **Decision:** Option 1. One-time setup (venv, collections) is documented in the README.
 - **Why:** Standard Ansible convention, nothing extra to learn.
-- **Trade-offs:** Ansible ignores `ansible.cfg` in a world-writable directory (for example a
-  repo cloned under `/mnt/c` in WSL). The README warns about it.
+- **Trade-offs:** Ansible reads `ansible.cfg` from the current working directory, so every
+  command (`ansible-galaxy`, `ansible-playbook`) must run from inside `2-ansible-docker/`.
+  From the repo root the inventory and `collections_path` are not applied. Ansible also
+  ignores `ansible.cfg` in a world-writable directory (for example a repo cloned under
+  `/mnt/c` in WSL). The README covers both points.
 - **Sources:**
   - https://docs.ansible.com/ansible/latest/reference_appendices/config.html
 

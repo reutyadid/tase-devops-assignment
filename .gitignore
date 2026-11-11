@@ -6,3 +6,6 @@ dist/
 build/
 *.tar.gz
 .vscode/
+.venv/
+2-ansible-docker/collections/
+.ansible/
