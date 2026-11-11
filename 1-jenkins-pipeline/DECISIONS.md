@@ -406,10 +406,49 @@ Each significant decision gets one entry. Newest at the bottom.
   1. Deploy as `admin` — simplest, but a leak from Jenkins gives full control of Nexus. Rejected.
   2. Config File Provider plugin (managed `settings.xml` in Jenkins) — works, but an extra plugin
      and the file is not in git next to the code. Rejected.
-- **To verify in chunk C3/C4:** whether recent Nexus Community Edition requires EULA acceptance
-  before use, and how to automate it. Not confirmed by an official source yet.
+- **Verified in C3:** Nexus Community Edition requires EULA acceptance before uploads (see D-012).
 - **Sources:**
   - https://help.sonatype.com/repomanager3/nexus-repository-administration/access-control/privileges
   - https://help.sonatype.com/repomanager3/using-nexus-repository/uploading-components
   - https://www.jenkins.io/doc/pipeline/steps/credentials-binding/
   - https://maven.apache.org/settings.html#servers
+
+---
+
+## D-012: Nexus container — image, memory, exposure
+
+- **Date:** 2026-11-10
+- **Context:** Nexus is the upload target (D-010). It must run on a laptop with WSL limited to
+  6 GB RAM, next to the Jenkins controller and agent.
+- **Decision:**
+  - Image `sonatype/nexus3:3.98.1` (Alpine, Java 21, runs as UID 200 — not root). Pinned tag.
+  - Memory: `-Xms1g -Xmx1g -XX:MaxDirectMemorySize=512m` via `INSTALL4J_ADD_VM_PARAMS`, and
+    `mem_limit: 2g` on the container. The image default (`-Djava.util.prefs.userRoot=...`) is
+    repeated, because setting the variable replaces it.
+  - Port `127.0.0.1:8081:8081`: reachable from this machine only.
+  - Named volume `nexus-data`: data survives `docker compose down` (removed only with `-v`).
+  - Healthcheck: `curl` to `/service/rest/v1/status/writable` (200 when Nexus accepts writes,
+    not only reads), `start_period: 300s` because the first start took ~4 minutes.
+  - No `container_name`: the service name `nexus` is already the DNS name inside the Compose
+    network, and a fixed name would clash with any other container called `nexus`.
+- **Why:**
+  - The common example values (2703m heap + 2703m direct memory, ~5.4 GB) are sized for an
+    8 GB host and do not fit here. One small Maven repository needs far less.
+  - Measured: healthy after ~4 minutes, ~1.2 GB used of the 2 GB limit.
+- **Found during C3 (verified on 3.98.1):**
+  - Community Edition blocks uploads until the EULA is accepted. An upload as `admin` returned
+    `403 You must accept the End User License Agreement (EULA) ...`.
+  - The REST API has `GET/POST /service/rest/v1/system/eula` (`"accepted": false/true`).
+  - The log also warns that the mandatory telemetry notice must be acknowledged in the UI. Since
+    3.98, if telemetry reporting fails for 30 days, Nexus becomes read-only. Not an issue for a
+    short-lived demo; noted in the README.
+- **Decision — EULA:** accepting a license is a legal choice of the person running the demo, so it
+  is never accepted on their behalf. Planned for chunk C4: `nexus/setup.sh` will accept it only
+  if `.env` has `NEXUS_ACCEPT_EULA=true`, otherwise stop with a message and the EULA link;
+  `.env.example` will ship `NEXUS_ACCEPT_EULA=false` (same pattern as `ACCEPT_EULA` in other images).
+- **Risks:** 1 GB heap is below Sonatype's sizing for real workloads; fine for one demo repo.
+- **Sources:**
+  - https://github.com/sonatype/docker-nexus3
+  - https://help.sonatype.com/en/configuring-the-runtime-environment.html
+  - https://help.sonatype.com/en/sonatype-nexus-repository-3-98-0-release-notes.html
+  - https://links.sonatype.com/products/nxrm3/docs/ce-onboarding

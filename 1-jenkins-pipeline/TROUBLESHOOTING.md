@@ -35,3 +35,26 @@ Real problems I hit while building this, and how I solved them.
   Negative check: with a wrong `distributionSha256Sum` the wrapper stops with
   `Failed to validate Maven distribution SHA-256`.
 - **Lesson:** Read the wrapper script before adding a checksum; test on the same image that CI uses.
+
+---
+
+## T-002: Upload to Nexus returns 403 although the user is admin
+
+- **Symptom:** a test upload to `maven-releases` with the admin user failed:
+  ```
+  HTTP 403
+  You must accept the End User License Agreement (EULA) through the onboarding wizard or REST API before proceeding.
+  ```
+- **Root cause:** Nexus Community Edition (3.98.1) blocks uploads until the EULA is accepted. It is
+  not a permissions problem. The healthcheck does not show it: `/service/rest/v1/status/writable`
+  returns 200 even while the EULA is not accepted.
+- **Fix:** accept the EULA once, through the UI or `POST /service/rest/v1/system/eula`. It is never
+  accepted on the reviewer's behalf: the setup script (chunk C4) does it only if `.env` has
+  `NEXUS_ACCEPT_EULA=true` (D-012).
+- **How to verify:**
+  ```bash
+  curl -s -u "admin:<password>" http://localhost:8081/service/rest/v1/system/eula
+  # expected after acceptance: "accepted" : true
+  ```
+- **Lesson:** "healthy" means the server is up, not that it is ready for our use case; test the
+  real action (an upload) early.

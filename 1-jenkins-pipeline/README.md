@@ -56,4 +56,7 @@ See [DECISIONS.md](DECISIONS.md). Key points:
   proxy repository (e.g. Nexus, `MVNW_REPOURL` + a `settings.xml` mirror).
 - **Build metadata.** Fail the build if an `SCM_*` value is missing (Maven Enforcer) and publish
   signed build provenance (SLSA). Here, local builds leave `${env.SCM_*}` as text in the manifest.
+- **Nexus Community Edition limits.** CE requires mandatory telemetry; since 3.98, if reporting
+  fails for 30 days, Nexus becomes read-only. CE also has usage limits. For production: Nexus Pro
+  (or another licensed repository), sized per Sonatype's memory guidance, with backups.
 - ...
