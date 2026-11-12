@@ -347,3 +347,356 @@ leftover_temp_files() {
     [[ "$stderr" == *"cannot create a temp file in 'ro'"* ]]
     chmod 755 ro                           # let bats delete the temp dir
 }
+
+# --- Chunk 5: unpacking with an archive tool (D-002, D-005) ---
+
+# Create test.zip (misleading name: pics.iso) with a file, a subfolder and a hidden
+# file, in the test's temp dir.
+make_zip() {
+    cd "$BATS_TEST_TMPDIR" || return 1
+    mkdir src
+    printf 'hello\n' > src/a.txt
+    mkdir src/sub
+    printf 'deep\n' > src/sub/b.txt
+    printf 'secret\n' > src/.hidden
+    (cd src && zip -qr ../pics.iso a.txt sub .hidden)
+    rm -rf src
+}
+
+@test "unpack_archive: zip with a misleading name, subfolders and hidden files" {
+    load_extract
+    make_zip
+    unpack_archive pics.iso unpack_zip
+    [ "$(cat a.txt)" = "hello" ]
+    [ "$(cat sub/b.txt)" = "deep" ]
+    [ "$(cat .hidden)" = "secret" ]
+    [ -f pics.iso ]                        # the archive is kept (D-004)
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: the permissions of the target folder do not change" {
+    load_extract
+    make_zip
+    mkdir out
+    mv pics.iso out/
+    chmod 755 out
+    unpack_archive out/pics.iso unpack_zip
+    [ "$(stat -c %a out)" = "755" ]
+}
+
+@test "unpack_archive: an existing file with the same name is overwritten" {
+    load_extract
+    make_zip
+    printf 'old\n' > a.txt
+    unpack_archive pics.iso unpack_zip
+    [ "$(cat a.txt)" = "hello" ]
+}
+
+@test "unpack_archive: a file vs. folder conflict fails with a warning" {
+    load_extract
+    make_zip
+    mkdir a.txt                            # the zip has a FILE called a.txt
+    verbose=1
+    run --separate-stderr unpack_archive pics.iso unpack_zip
+    [ "$status" -eq 1 ]
+    [[ "$stderr" == *"could not write all files"* ]]
+    [ -d a.txt ]
+    # The copy is not all-or-nothing (D-002): the other items were written.
+    [ -f sub/b.txt ]
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: a name that starts with '-' works" {
+    load_extract
+    make_zip
+    mv pics.iso ./-o.zip
+    unpack_archive -o.zip unpack_zip
+    [ "$(cat a.txt)" = "hello" ]
+}
+
+@test "unpack_archive: a corrupt zip fails, writes nothing" {
+    load_extract
+    make_zip
+    head -c 100 pics.iso > broken.zip      # cut the zip in the middle
+    rm pics.iso
+    run --separate-stderr unpack_archive broken.zip unpack_zip
+    [ "$status" -eq 1 ]
+    [ -z "$stderr" ]                       # quiet without -v
+    [ ! -e a.txt ]                         # nothing was written
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: an encrypted zip fails at once (no password prompt)" {
+    load_extract
+    cd "$BATS_TEST_TMPDIR"
+    printf 'hello\n' > a.txt
+    zip -q -P secret enc.zip a.txt
+    rm a.txt
+    # A new bash under "timeout", so a hang ends the test instead of blocking it.
+    # Single quotes on purpose: $1 is expanded by the inner bash (= $EXTRACT).
+    # shellcheck disable=SC2016
+    run timeout 10 bash -c 'source "$1"; unpack_archive enc.zip unpack_zip' _ "$EXTRACT"
+    [ "$status" -eq 1 ]                    # 124 would mean timeout = it waited
+    [ ! -e a.txt ]
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: an empty zip counts as a failure" {
+    load_extract
+    cd "$BATS_TEST_TMPDIR"
+    printf 'x' > tmp.txt
+    zip -q empty.zip tmp.txt
+    zip -q -d empty.zip tmp.txt            # delete the only entry -> empty zip
+    rm tmp.txt
+    run unpack_archive empty.zip unpack_zip
+    [ "$status" -eq 1 ]
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: a '../' path in the zip stays inside the folder" {
+    load_extract
+    cd "$BATS_TEST_TMPDIR"
+    mkdir -p work/inner
+    printf 'bad\n' > work/escaped.txt
+    (cd work/inner && zip -q ../../slip.zip ../escaped.txt)
+    rm work/escaped.txt
+    mv slip.zip work/inner/
+    unpack_archive work/inner/slip.zip unpack_zip
+    [ -f work/inner/escaped.txt ]          # unzip removed the "../"
+    [ ! -e work/escaped.txt ]
+}
+
+@test "unpack_archive: a symlink in the zip cannot be used to write outside" {
+    load_extract
+    cd "$BATS_TEST_TMPDIR"
+    mkdir outside build
+    # Entry 1: lnk -> outside folder. Entry 2: lnk/evil.txt (written through the link?)
+    ln -s "$BATS_TEST_TMPDIR/outside" build/lnk
+    (cd build && zip -qy ../evil.zip lnk)
+    rm build/lnk
+    mkdir build/lnk
+    printf 'bad\n' > build/lnk/evil.txt
+    (cd build && zip -q ../evil.zip lnk/evil.txt)
+    rm -rf build
+    run unpack_archive evil.zip unpack_zip
+    [ "$status" -eq 1 ]
+    [ -z "$(ls -A outside)" ]
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "unpack_archive: an existing symlink is replaced, not written through" {
+    load_extract
+    make_zip
+    mkdir outside
+    printf 'mine\n' > outside/target.txt
+    ln -s outside/target.txt a.txt
+    unpack_archive pics.iso unpack_zip
+    [ ! -L a.txt ]
+    [ "$(cat a.txt)" = "hello" ]
+    [ "$(cat outside/target.txt)" = "mine" ]
+}
+
+@test "unpack_archive: an existing subfolder keeps its permissions" {
+    load_extract
+    make_zip
+    mkdir sub
+    chmod 755 sub
+    unpack_archive pics.iso unpack_zip
+    [ "$(stat -c %a sub)" = "755" ]
+}
+
+@test "unpack_archive: an entry with the archive's own name is refused (D-004)" {
+    load_extract
+    cd "$BATS_TEST_TMPDIR"
+    mkdir src
+    printf 'hi\n' > src/self.zip
+    (cd src && zip -q ../self.zip self.zip)
+    rm -rf src
+    cp self.zip original.copy
+    run unpack_archive self.zip unpack_zip
+    [ "$status" -eq 1 ]
+    cmp -s self.zip original.copy
+}
+
+# --- Chunks 6-8: the whole script (counting, folders, -r, nested archives) ---
+
+# Create in the test's temp dir: a gzip, a zip and a plain file, misleading names.
+make_mix() {
+    cd "$BATS_TEST_TMPDIR" || return 1
+    printf 'hello\n' | gzip > one.txt
+    printf 'zipped\n' > z.txt
+    zip -q two.dat z.txt
+    rm z.txt
+    printf 'plain\n' > plain.txt
+}
+
+@test "main: prints the number decompressed, returns the number NOT decompressed" {
+    make_mix
+    run --separate-stderr "$EXTRACT" one.txt two.dat plain.txt
+    [ "$status" -eq 1 ]                    # plain.txt
+    [ "$output" = "2" ]
+    [ -z "$stderr" ]                       # quiet without -v
+    [ "$(cat one.txt.out)" = "hello" ]
+    [ "$(cat z.txt)" = "zipped" ]
+}
+
+@test "main: -v prints each decompressed file and warns for the others" {
+    make_mix
+    run --separate-stderr "$EXTRACT" -v one.txt plain.txt missing
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"decompressed: one.txt"* ]]
+    [ "${lines[-1]}" = "1" ]
+    [[ "$stderr" == *"plain.txt: not compressed"* ]]
+    [[ "$stderr" == *"missing: no such file"* ]]
+}
+
+@test "main: an empty file and an unreadable file are NOT decompressed" {
+    cd "$BATS_TEST_TMPDIR"
+    : > empty
+    printf 'hello\n' | gzip > locked
+    chmod 000 locked
+    run "$EXTRACT" empty locked
+    chmod 644 locked
+    if [ "$(id -u)" -eq 0 ]; then skip "root can read any file"; fi
+    [ "$status" -eq 2 ]
+    [ "$output" = "0" ]
+}
+
+@test "main: a folder without -r: only its direct children" {
+    make_mix
+    mkdir -p dir/sub
+    mv one.txt plain.txt dir/
+    printf 'deep\n' | gzip > dir/sub/deep.gz
+    run --separate-stderr "$EXTRACT" -v dir
+    [ "$status" -eq 1 ]                    # dir/plain.txt
+    [ "${lines[-1]}" = "1" ]
+    [ ! -e dir/sub/deep ]
+    [[ "$stderr" == *"subfolder skipped (use -r)"* ]]
+}
+
+@test "main: a folder with -r: the whole tree" {
+    make_mix
+    mkdir -p dir/sub
+    mv one.txt dir/
+    printf 'deep\n' | gzip > dir/sub/deep.gz
+    run "$EXTRACT" -r dir
+    [ "$status" -eq 0 ]
+    [ "$output" = "2" ]
+    [ "$(cat dir/sub/deep)" = "deep" ]
+}
+
+@test "main: a symlink inside a folder is not followed and is counted" {
+    make_mix
+    mkdir dir
+    ln -s ../one.txt dir/link
+    run "$EXTRACT" dir
+    [ "$status" -eq 1 ]
+    [ "$output" = "0" ]
+    [ ! -e dir/link.out ]
+}
+
+@test "main: a symlink given on the command line is followed" {
+    make_mix
+    ln -s one.txt link.gz
+    run "$EXTRACT" link.gz
+    [ "$status" -eq 0 ]
+    [ "$(cat link)" = "hello" ]
+}
+
+# outer.zip contains inner.gz (a gzip file).
+make_nested() {
+    cd "$BATS_TEST_TMPDIR" || return 1
+    printf 'inner\n' | gzip > inner.gz
+    zip -q outer.zip inner.gz
+    rm inner.gz
+}
+
+@test "main: an archive inside an archive without -r: counted, not unpacked" {
+    make_nested
+    run --separate-stderr "$EXTRACT" -v outer.zip
+    [ "$status" -eq 1 ]
+    [ "${lines[-1]}" = "1" ]
+    [ -f inner.gz ]
+    [ ! -e inner ]
+    [[ "$stderr" == *"archive inside an archive"* ]]
+}
+
+@test "main: an archive inside an archive with -r: unpacked too" {
+    make_nested
+    run "$EXTRACT" -r outer.zip
+    [ "$status" -eq 0 ]
+    [ "$output" = "2" ]
+    [ "$(cat inner)" = "inner" ]
+}
+
+@test "main: -r stops at MAX_DEPTH=3 levels of nesting" {
+    cd "$BATS_TEST_TMPDIR"
+    # l4.gz inside l3.zip inside l2.zip inside l1.zip (4 levels)
+    printf 'x\n' | gzip > l4.gz
+    zip -qm l3.zip l4.gz
+    zip -qm l2.zip l3.zip
+    zip -qm l1.zip l2.zip
+    run --separate-stderr "$EXTRACT" -rv l1.zip
+    [ "$status" -eq 1 ]                    # l4.gz is too deep
+    [ "${lines[-1]}" = "3" ]
+    [ ! -e l4 ]
+    [[ "$stderr" == *"deeper than 3 levels"* ]]
+}
+
+@test "main: more than 255 failures -> exit 255 and a warning even without -v" {
+    cd "$BATS_TEST_TMPDIR"
+    run --separate-stderr "$EXTRACT" $(seq -f 'missing%g' 1 300)
+    [ "$status" -eq 255 ]
+    [[ "$stderr" == *"300 files were not decompressed"* ]]
+}
+
+@test "main: a leftover temp file is removed when the script is stopped" {
+    cd "$BATS_TEST_TMPDIR"
+    # A fake gunzip that never finishes, so we can stop extract in the middle.
+    mkdir bin
+    printf '#!/bin/sh\nexec sleep 5\n' > bin/gunzip
+    chmod +x bin/gunzip
+    printf 'hello\n' | gzip > data.gz
+    # 3>&-: close bats' FD 3 in the background job, or bats waits for it to end.
+    PATH="$PWD/bin:$PATH" "$EXTRACT" data.gz 3>&- &
+    local pid=$!
+    for _ in 1 2 3 4 5 6 7 8 9 10; do      # wait up to 2 s for the temp file
+        [ -n "$(leftover_temp_files)" ] && break
+        sleep 0.2
+    done
+    [ -n "$(leftover_temp_files)" ]        # the temp file exists while it runs
+    kill -TERM "$pid"
+    wait "$pid" || true
+    [ -z "$(leftover_temp_files)" ]
+}
+
+@test "main: an existing file in a folder the zip merges into is not 'created'" {
+    cd "$BATS_TEST_TMPDIR"
+    mkdir -p src/sub
+    printf 'x\n' > src/sub/x.txt
+    (cd src && zip -qr ../outer.zip sub)
+    rm -rf src
+    mkdir sub
+    printf 'old\n' | gzip > sub/old.gz        # already there before the run
+    run "$EXTRACT" outer.zip
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+    [ ! -e sub/old ]
+}
+
+@test "main: -v paths have no repeated ./ prefix" {
+    make_nested
+    run --separate-stderr "$EXTRACT" -rv outer.zip
+    [[ "$output" != *"././"* ]]
+}
+
+@test "main: -r counts a folder it cannot read, quiet without -v" {
+    [ "$(id -u)" -ne 0 ] || skip "root can read any folder"
+    cd "$BATS_TEST_TMPDIR"
+    mkdir -p d/locked
+    chmod 000 d/locked
+    run --separate-stderr "$EXTRACT" -r d
+    chmod 755 d/locked
+    [ "$status" -eq 1 ]
+    [ -z "$stderr" ]
+}

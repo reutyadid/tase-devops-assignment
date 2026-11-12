@@ -79,3 +79,38 @@ Real problems I hit while building this, and how I solved them.
 - **Fix:** `declare -gA` (`-g` = global) for both tables.
 - **How to verify:** `bats 3-bash-extract/tests` → the `tables:` tests pass.
 - **Lesson:** Code that may be sourced should declare its globals with `-g`.
+
+---
+
+## T-005: Extracting a zip changed the permissions of the user's folder to 700
+
+- **Symptom (found in a test before it was released):**
+  ```
+  $ stat -c %a dst      # before: 755
+  700
+  ```
+- **Root cause:** the first plan copied with `cp -af "$tmpdir/." "$dir/"`. The trailing
+  `/.` means "the folder itself", and `-a` keeps its attributes. `mktemp -d` creates
+  folders with mode 700, so that mode was copied onto the user's folder.
+- **Fix:** copy only the items inside the temp folder, and without `-a` (it would still
+  copy a zip folder's mode onto an existing subfolder, one level down):
+  `find "$tmpdir" -mindepth 1 -maxdepth 1 -exec cp -Rf --remove-destination --preserve=timestamps -t "$dir" -- {} +`
+- **How to verify:** `bats 3-bash-extract/tests` → the test
+  `unpack_archive: the permissions of the target folder do not change` passes
+  (it fails with the old `cp` line).
+- **Lesson:** `cp -a src/. dst/` copies the attributes of `src` itself, not only its contents.
+
+---
+
+## T-006: `ls -A` in a test shows a file I did not create
+
+- **Symptom:**
+  ```
+  LS: broken.zip separate-stderr-51mano
+  ```
+- **Root cause:** `run --separate-stderr` stores stderr in a temp file inside
+  `$BATS_TEST_TMPDIR`, the same folder the test works in.
+- **Fix:** check for the specific files the test cares about (`[ ! -e a.txt ]`), not for
+  the exact folder listing.
+- **How to verify:** `bats 3-bash-extract/tests` → all tests `ok`.
+- **Lesson:** do not assume a test framework's temp folder is empty.

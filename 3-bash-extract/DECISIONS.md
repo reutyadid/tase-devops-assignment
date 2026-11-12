@@ -57,7 +57,16 @@ Each significant decision gets one entry. Newest at the bottom.
   - `mv -fT`: `-T` never moves the file *into* a folder, even if a folder with the output
     name appears after our `-d` check.
   - `ARCHIVE_TOOLS` (one file in → many files out): unzip — extract into a temp dir
-    (`mktemp -d`) in the same folder, then `cp -af "$tmpdir/." "$dir/"` only on success.
+    (`mktemp -d`) in the same folder, then copy only on success, item by item:
+    `find "$tmpdir" -mindepth 1 -maxdepth 1 -exec cp -Rf --remove-destination --preserve=timestamps -t "$dir" -- {} +`.
+    `-R` without `-a` keeps the permissions of folders that already exist;
+    `--remove-destination` replaces an existing symlink instead of writing through it.
+    Not `cp -af "$tmpdir/." "$dir/"` (the first plan): it also copies the temp folder's
+    own permissions (700) onto the user's folder (found in a test, see T-005).
+  - Archive functions (e.g. `unpack_zip`) run with `</dev/null` and hidden output. Any
+    non-zero exit code is a failure (unzip returns 1 for warnings, e.g. an empty zip or a
+    removed absolute path). If the tool is not installed, the warning names the
+    function (`'unpack_zip' failed`), so new methods need no extra check.
   - A `trap ... EXIT` removes leftover temp files/dirs if the script stops (e.g. Ctrl+C).
     The temp variable is reset after each successful `mv`.
   - Temp dirs are removed with `rm -rf -- "${tmpdir:?}"` (fails if the variable is empty).
@@ -72,6 +81,11 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Known limitation:** if Ctrl+C arrives right after `mktemp` created the temp file but
   before its name is saved in `TMP_PATH`, an empty hidden `.extract.XXXXXX` file is left.
   The window is tiny; closing it would need a much more complex design.
+- **Known limitations (zip):** the copy is not all-or-nothing: if one item conflicts
+  (a file vs. a folder with the same name), the other items are still written and the
+  archive counts as NOT decompressed. Each file is written twice (temp folder, then copy),
+  so a big zip needs twice its size in free disk space. An entry with the archive's own
+  name is refused, so the archive is never overwritten (D-004).
 - **Trade-offs:** For zip, `cp` is not atomic and the temp dir needs extra disk space
   for a moment. `cp` is used instead of `mv` because `mv` cannot merge into an existing
   folder. A few more lines of code.
@@ -147,7 +161,11 @@ Each significant decision gets one entry. Newest at the bottom.
   ask a question.
 - **Decision:**
   - The tools always write into a new, empty place (D-002). Overwriting is done by
-    `mv -f` (stream tools) and `cp -af` (zip).
+    `mv -fT` (stream tools) and `cp -Rf --remove-destination` (zip, item by item, D-002).
+  - `unzip -P ''`: an encrypted zip fails at once (exit 82) instead of asking for a
+    password. `unzip` has no `--`, so a relative name gets `./` in front (`-o.zip`).
+  - Verified: unzip removes `../` and leading `/` from entry names, and refuses to write
+    through a symlink created by the same archive. Nothing is written outside the folder.
   - `unzip -o`: an archive can contain the same name twice; without `-o` unzip stops and
     asks `replace a.txt?` and the script hangs.
   - The extracted file gets the permissions of the original archive:
@@ -181,6 +199,11 @@ Each significant decision gets one entry. Newest at the bottom.
   - Symlinks: not followed inside folders. A symlink given on the command line **is**
     followed (`find -H`). For a symlink to a file, the output goes to the symlink's folder
     and the name is derived from the symlink's name.
+  - `find` errors are hidden. With `-r`, a subfolder that cannot be read or entered
+    counts as NOT decompressed (its files are unknown), with a `-v` warning.
+- **Known limitation:** an output can overwrite a file that is still in the list
+  (`b.gz` → `b`, and `b` is also an archive); the result then depends on `find`'s order.
+  The assignment asks for overwriting, so this is accepted.
 - **Why:** `find` is the standard tool for this and worth knowing well.
 - **Trade-offs:** `mapfile`, `-print0`, `-d ''` and `< <(...)` must be understood and
   explained.
@@ -209,6 +232,7 @@ Each significant decision gets one entry. Newest at the bottom.
   | Symlink found inside a folder                               | NOT decompressed    |
   | Empty file (`inode/x-empty`)                                | NOT decompressed    |
   | Unreadable file (no permission)                             | NOT decompressed    |
+  | Unreadable subfolder with `-r`                              | NOT decompressed    |
   | Archive that failed (corrupt, missing tool, cp conflict)    | NOT decompressed    |
   | Nested archive without `-r`                                 | NOT decompressed    |
   | Archive deeper than `MAX_DEPTH`                             | NOT decompressed    |
@@ -261,8 +285,9 @@ Each significant decision gets one entry. Newest at the bottom.
     folders in archives — all the way down, up to `MAX_DEPTH=3` levels of archive nesting
     (depth 1 = an archive given by the user or found in a folder). A deeper archive is not
     extracted, counts as NOT decompressed, and gets a `-v` warning.
-  - Only what was **just created** is checked (the temp file / temp dir from D-002); the
-    folder is never re-scanned.
+  - Only what was **just created** is checked: the output file, or the files listed in
+    the temp folder before the copy (D-002). Files that were already in the folder are
+    never re-scanned.
 - **Why:** The original archive stays in place (D-004), so re-scanning the folder would
   find it again and loop forever. Archives that contain themselves ("quine" zips) and zip
   bombs make a depth limit necessary.
