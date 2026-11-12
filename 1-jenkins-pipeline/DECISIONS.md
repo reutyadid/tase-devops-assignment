@@ -317,7 +317,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-009: Unique version per build — CI-friendly `${revision}` + flatten-maven-plugin
 
 - **Date:** 2026-11-10
-- **Context:** Nexus `maven-releases` rejects re-deploying an existing version (HTTP 400), so
+- **Context:** Nexus `maven-releases` rejects re-deploying an existing version (HTTP 409, verified in C5), so
   every build must deploy a new version (R-5).
 - **Options considered:**
   1. CI-friendly `${revision}` + `flatten-maven-plugin` — version from the build number;
@@ -339,7 +339,7 @@ Each significant decision gets one entry. Newest at the bottom.
     but it is not GA yet.
 - **Risks:**
   - Build numbers restart at 1 if the Jenkins volume is deleted (`docker compose down -v`); then
-    deploy fails with HTTP 400 because `1.0.1` already exists. For the demo: reset Nexus and
+    deploy fails with HTTP 409 because `1.0.1` already exists. For the demo: reset Nexus and
     Jenkins volumes together (documented in README).
   - Pin a `flatten-maven-plugin` version released at least a few weeks ago (1.9.0 was released
     2026-11-06 — too new).
@@ -363,18 +363,35 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Decision:** Option 1. One command in the Upload stage:
   `./mvnw -s settings.xml deploy -Drevision=1.0.${BUILD_NUMBER}`.
 - **Why:** Standard Maven, maps 1:1 to "upload to repo", no extra plugin.
-- **To verify when implemented (chunk C5):**
-  - The `<id>` of the repository in `distributionManagement` must equal the `<server><id>` in
-    `settings.xml`. Maven matches credentials only by this id; a mismatch sends the request
-    without credentials and Nexus answers `401 Unauthorized`. Maven 3.10 is stricter: credentials
-    are sent only to the server whose id matches.
-  - Nexus is reached over plain HTTP inside the Docker network. Since Maven 3.8.1 the default
-    `maven-default-http-blocker` mirror blocks HTTP repositories (CVE-2021-26291). It targets
-    dependency downloads (ours come from Maven Central over HTTPS), but we verify that deploy over
-    HTTP is not blocked. In production: HTTPS for Nexus.
+- **Verified in C5** (manual `mvnw deploy` on the agent image, inside the Compose network):
+  - **Server id match.** `distributionManagement` and `settings.xml` both use `nexus-releases`.
+    With a different id in `settings.xml`, Maven sends no credentials and Nexus answers
+    `HTTP Status: 401`.
+  - **Credentials bound to the host.** Maven 3.10 warned that the server had no
+    `<repositoryOrigins>`. `settings.xml` (model 1.3.0) now lists `http://nexus:8081`, so the
+    password is sent only to that host, even if another repository reuses the id. This works
+    in Maven's default scope (`origin`): once a server lists an origin, its credentials are not
+    sent to another origin. `strict` only adds that a server *without* origins gets no
+    credentials, so the pipeline does not need the flag. Also tested with
+    `-Dmaven.repository.credentialScope=strict`: no warning, upload works.
+  - **HTTP blocker.** Since Maven 3.8.1 the `maven-default-http-blocker` mirror blocks HTTP
+    repositories (CVE-2021-26291). It applies to downloads, not to deploy: the upload to
+    `http://nexus:8081` worked. Dependencies still come from Maven Central over HTTPS.
+    In production: HTTPS for Nexus.
+  - **Redeploy.** Deploying the same version again fails with `HTTP Status: 409` (release
+    repository: no overwrite). Each build needs a new version (D-009).
+  - The password does not appear in the Maven log.
+  - Command used (from `1-jenkins-pipeline/app`, with Nexus running and `nexus/setup.sh` done):
+    ```bash
+    set -a; source ../.env; set +a
+    docker run --rm --network tase-jenkins_default -u "$(id -u):$(id -g)" -e HOME=/tmp \
+      -e NEXUS_DEPLOY_USER -e NEXUS_DEPLOY_PASSWORD -v "$PWD:/app" -w /app \
+      --entrypoint ./mvnw jenkins/ssh-agent:9.3.2-jdk21 -B -s settings.xml deploy -Drevision=1.0.2
+    # expected: Uploaded ... hello-app-1.0.2.jar ... BUILD SUCCESS
+    ``` Nexus memory during the upload: ~1.0 GB of 2 GB.
 - **Sources:**
   - https://maven.apache.org/plugins/maven-deploy-plugin/
-  - https://maven.apache.org/settings.html#servers
+  - https://maven.apache.org/settings.html#servers (`repositoryOrigins`, `credentialScope`)
   - https://maven.apache.org/docs/3.10.0/release-notes.html
   - https://maven.apache.org/docs/3.8.1/release-notes.html
 
@@ -396,7 +413,7 @@ Each significant decision gets one entry. Newest at the bottom.
   - The script is idempotent (safe to run twice) and checked with `shellcheck`.
 - **Decision — password to Maven:**
   - `settings.xml` is committed and holds no secret: `<server><id>nexus-releases</id>` with
-    `${env.NEXUS_USER}` / `${env.NEXUS_PASSWORD}`.
+    `${env.NEXUS_DEPLOY_USER}` / `${env.NEXUS_DEPLOY_PASSWORD}` (same names as in `.env`).
   - The Jenkinsfile wraps only the deploy command in
     `withCredentials([usernamePassword(credentialsId: 'nexus-deploy', ...)])`; the values exist as
     env vars only during that command and are masked as `****` in the log.

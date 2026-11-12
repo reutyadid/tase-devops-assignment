@@ -28,6 +28,18 @@
     </dependency>
   </dependencies>
 
+  <!-- Where `mvn deploy` uploads (D-010). The id must match the <server> id in settings.xml,
+       otherwise Maven sends no credentials and Nexus answers 401.
+       The host must match <repositoryOrigin> in settings.xml. `nexus` resolves only inside
+       the Compose network. Deploy always needs -Drevision=1.0.N: the default version is a
+       SNAPSHOT, and only a release repository is defined. -->
+  <distributionManagement>
+    <repository>
+      <id>nexus-releases</id>
+      <url>http://nexus:8081/repository/maven-releases/</url>
+    </repository>
+  </distributionManagement>
+
   <build>
     <!-- Pin every lifecycle plugin so the build does not depend on Maven's defaults. -->
     <pluginManagement>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Maven settings for CI, used with: ./mvnw -s settings.xml deploy  (D-011)
+     No secret in this file: Maven reads the credentials from env vars that Jenkins
+     sets only for the deploy command (withCredentials). Same names as in .env.
+     Requires Maven 3.10+ (the wrapper's version): older Maven ignores <repositoryOrigins>
+     with only a warning and sends the credentials by id alone. -->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.3.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.3.0 https://maven.apache.org/xsd/settings-1.3.0.xsd">
+  <servers>
+    <server>
+      <!-- Must match <distributionManagement><repository><id> in pom.xml. -->
+      <id>nexus-releases</id>
+      <username>${env.NEXUS_DEPLOY_USER}</username>
+      <password>${env.NEXUS_DEPLOY_PASSWORD}</password>
+      <!-- Send these credentials only to this host (Maven 3.10 credential scoping).
+           Must match the host in the <distributionManagement> URL in pom.xml. -->
+      <repositoryOrigins>
+        <repositoryOrigin>http://nexus:8081</repositoryOrigin>
+      </repositoryOrigins>
+    </server>
+  </servers>
+</settings>

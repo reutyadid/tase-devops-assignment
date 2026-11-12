@@ -59,4 +59,7 @@ See [DECISIONS.md](DECISIONS.md). Key points:
 - **Nexus Community Edition limits.** CE requires mandatory telemetry; since 3.98, if reporting
   fails for 30 days, Nexus becomes read-only. CE also has usage limits. For production: Nexus Pro
   (or another licensed repository), sized per Sonatype's memory guidance, with backups.
+- **Nexus URL per environment.** Here `http://nexus:8081` is written in `app/pom.xml` and
+  `app/settings.xml` (one environment, two lines next to each other). In production the URL
+  comes from the CI configuration per environment, and Nexus is served over HTTPS.
 - ...
