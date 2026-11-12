@@ -12,8 +12,8 @@
 ## Requirements matrix
 
 Rows `R-*` come directly from the assignment text.
-Rows `N-*` are derived (reviewer experience, working rules in `CLAUDE.md`); they are not part
-of the assignment text. Each `N-*` row was explicitly approved during planning.
+Rows `N-*` are derived requirements (reviewer experience, security and operability); they are
+not part of the assignment text.
 
 | ID  | Requirement | Implementation | Decision | How to verify | Status |
 |-----|-------------|----------------|----------|---------------|--------|

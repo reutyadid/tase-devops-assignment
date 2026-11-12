@@ -116,7 +116,7 @@ else
 fi
 
 # --- 4. Role: read + upload to maven-releases only ------------------------------------
-# Minimal set, verified in C4: without "edit" even the first upload gets 403 (T-004, D-011).
+# Minimal set, verified: without "edit" even the first upload gets 403 (T-004, D-011).
 role_json='{
   "id": "'"$ROLE_ID"'",
   "name": "'"$ROLE_ID"'",

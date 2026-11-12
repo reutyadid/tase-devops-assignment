@@ -26,8 +26,7 @@ TMP_PATH=""
 # To add a method, add one line to one of these tables, and add the type to the
 # "Supported:" line in usage() (that list is written by hand, see D-002).
 # Optional for a stream tool: add its suffix to output_name (else: <name>.out).
-# declare -A = associative array (keys are strings). -g = global, so the tables
-# stay global even when this file is sourced from inside a function (tests).
+# -g: the tables stay global even when this file is sourced inside a function (tests).
 
 # Stream tools: one file in -> one file out. Value = a tool that supports -c (stdout).
 declare -gA STREAM_TOOLS=(
@@ -63,14 +62,12 @@ output_name() {
     local path="$1"
     local base=""
 
-    # ${path%.gz} = $path without ".gz" at the end
     case "$path" in
         *.gz)  base="${path%.gz}" ;;
         *.bz2) base="${path%.bz2}" ;;
         *.Z)   base="${path%.Z}" ;;
     esac
 
-    # ${base##*/} = the last part of the path (everything after the last "/").
     local name="${base##*/}"
 
     # No known suffix, or no real file name left after removing it:
@@ -129,7 +126,7 @@ unpack_stream() {
         cleanup
         return 1
     fi
-    TMP_PATH=""   # renamed: nothing left to clean up
+    TMP_PATH=""
     CREATED=("$out")
 }
 
@@ -176,13 +173,13 @@ unpack_archive() {
 
     # Remember the files this archive created (from the temp folder, not from $dir,
     # so files that were already in $dir are not included). Used by D-009.
-    # %P = the path inside the temp folder. Symlinks are not included (-type f).
+    # Symlinks are not included (-type f).
     CREATED=()
     while IFS= read -r -d '' item; do
         CREATED+=("$dir/$item")
     done < <(find "$TMP_PATH" -type f -printf '%P\0')
 
-    # Copy what is INSIDE the temp folder, item by item ({} + = all items in one cp).
+    # Copy what is INSIDE the temp folder, item by item.
     # Not "cp -a $TMP_PATH/.": -a copies folder permissions onto existing folders
     # (T-005). -R without -a keeps the permissions of folders that already exist.
     # --remove-destination: replace an existing symlink instead of writing through it.
@@ -223,7 +220,6 @@ process_file() {
     fi
 
     type=$(detect_type "$file")
-    # ":-" = empty if the type is not in the table (no error with "set -u").
     tool="${STREAM_TOOLS[$type]:-}"
     func="${ARCHIVE_TOOLS[$type]:-}"
 
@@ -242,7 +238,6 @@ process_file() {
         return
     fi
 
-    # Choose the unpack function, then call it once.
     # The unpack functions print their own warning; here we only count.
     local method="unpack_archive"
     local how="$func"
@@ -263,11 +258,10 @@ process_file() {
 }
 
 # Look for archives inside the files that were just created (D-009).
-# process_file decides: plain file -> ignored, archive -> unpacked (-r) or counted.
 # $1 = depth of the archive that created them.
 check_created() {
     local depth="$1"
-    local -a files=("${CREATED[@]}")   # copy: the next unpack changes CREATED
+    local -a files=("${CREATED[@]}")   # the next unpack overwrites CREATED
     local file
 
     for file in "${files[@]}"; do

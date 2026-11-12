@@ -1,4 +1,4 @@
-# Decisions
+# Decisions — Task 1: Jenkins pipeline
 
 Each significant decision gets one entry. Newest at the bottom.
 
@@ -311,7 +311,7 @@ Each significant decision gets one entry. Newest at the bottom.
   secret files with `${readFile:...}`, not from environment variables. Compose creates them from
   `.env` (`secrets: ... environment:`) and from `secrets/agent_key` (git-ignored). Verified: no
   secret value in `docker inspect` or in the Jenkins log.
-- **Implemented (chunk C6-C8):**
+- **Implementation:**
   - Image `jenkins/jenkins:2.580.2-lts-jdk21` (LTS, Java 21). `plugins.txt` pins 8 direct plugins
     and all 60 dependencies; the list was generated once with `jenkins-plugin-cli` on that image.
   - `casc.yaml` is copied into the image (outside the `jenkins-home` volume), so a rebuilt image
@@ -374,7 +374,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-009: Unique version per build — CI-friendly `${revision}` + flatten-maven-plugin
 
 - **Date:** 2026-11-10
-- **Context:** Nexus `maven-releases` rejects re-deploying an existing version (HTTP 409, verified in C5), so
+- **Context:** Nexus `maven-releases` rejects re-deploying an existing version (HTTP 409, verified), so
   every build must deploy a new version (R-5).
 - **Options considered:**
   1. CI-friendly `${revision}` + `flatten-maven-plugin` — version from the build number;
@@ -420,7 +420,7 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Decision:** Option 1. One command in the Upload stage:
   `./mvnw -s settings.xml deploy -Drevision=1.0.${BUILD_NUMBER}`.
 - **Why:** Standard Maven, maps 1:1 to "upload to repo", no extra plugin.
-- **Verified in C5** (manual `mvnw deploy` on the agent image, inside the Compose network):
+- **Verified** (manual `mvnw deploy` on the agent image, inside the Compose network):
   - **Server id match.** `distributionManagement` and `settings.xml` both use `nexus-releases`.
     With a different id in `settings.xml`, Maven sends no credentials and Nexus answers
     `HTTP Status: 401`.
@@ -463,7 +463,7 @@ Each significant decision gets one entry. Newest at the bottom.
   - `nexus/setup.sh` (bash + `curl` to the Nexus REST API) runs once after Nexus starts:
     1. Changes the initial random admin password (`/nexus-data/admin.password`) to the one in `.env`.
     2. Creates a role with only the privileges needed to deploy to `maven-releases`.
-       Verified in C4: `nx-repository-view-maven2-maven-releases-read`, `-add` and `-edit`.
+       Verified: `nx-repository-view-maven2-maven-releases-read`, `-add` and `-edit`.
        With only `read` + `add`, even the first upload returned 403 (T-004). No delete, no admin
        privileges, no other repository: an upload to `maven-snapshots` returns 403.
     3. Creates the deploy user with that role.
@@ -482,7 +482,7 @@ Each significant decision gets one entry. Newest at the bottom.
   1. Deploy as `admin` — simplest, but a leak from Jenkins gives full control of Nexus. Rejected.
   2. Config File Provider plugin (managed `settings.xml` in Jenkins) — works, but an extra plugin
      and the file is not in git next to the code. Rejected.
-- **Verified in C3:** Nexus Community Edition requires EULA acceptance before uploads (see D-012).
+- **Verified:** Nexus Community Edition requires EULA acceptance before uploads (see D-012).
 - **Sources:**
   - https://help.sonatype.com/repomanager3/nexus-repository-administration/access-control/privileges
   - https://help.sonatype.com/repomanager3/using-nexus-repository/uploading-components
@@ -511,7 +511,7 @@ Each significant decision gets one entry. Newest at the bottom.
   - The common example values (2703m heap + 2703m direct memory, ~5.4 GB) are sized for an
     8 GB host and do not fit here. One small Maven repository needs far less.
   - Measured: healthy after ~4 minutes, ~1.2 GB used of the 2 GB limit.
-- **Found during C3 (verified on 3.98.1):**
+- **Verified on 3.98.1:**
   - Community Edition blocks uploads until the EULA is accepted. An upload as `admin` returned
     `403 You must accept the End User License Agreement (EULA) ...`.
   - The REST API has `GET/POST /service/rest/v1/system/eula` (`"accepted": false/true`).
@@ -519,7 +519,7 @@ Each significant decision gets one entry. Newest at the bottom.
     3.98, if telemetry reporting fails for 30 days, Nexus becomes read-only. Not an issue for a
     short-lived demo; noted in the README.
 - **Decision — EULA:** accepting a license is a legal choice of the person running the demo, so it
-  is never accepted on their behalf. Implemented in C4: `nexus/setup.sh` accepts it only if `.env`
+  is never accepted on their behalf: `nexus/setup.sh` accepts it only if `.env`
   has `NEXUS_ACCEPT_EULA=true`, otherwise it stops with a message and the EULA link, before any
   change to Nexus. After accepting, it reads the status again and fails if it is not `true`.
   `.env.example` ships `NEXUS_ACCEPT_EULA=false` (same pattern as `ACCEPT_EULA` in other images).

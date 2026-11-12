@@ -1,4 +1,4 @@
-# Troubleshooting
+# Troubleshooting — Task 3: Bash `extract`
 
 Real problems I hit while building this, and how I solved them.
 
@@ -31,7 +31,7 @@ Real problems I hit while building this, and how I solved them.
   SC1091 (info): Not following: ../extract: openBinaryFile: does not exist
   ```
 - **Root cause:**
-  - SC2034: `verbose` / `recursive` are set by getopts but only used in later chunks.
+  - SC2034: `verbose` / `recursive` are set by getopts but were not yet used by any function.
   - SC2154: `$stderr` is set by bats (`run --separate-stderr`); `$verbose` / `$recursive`
     come from the sourced script. ShellCheck cannot see either.
   - SC1091: a `# shellcheck source=` path is resolved from the current directory by default.

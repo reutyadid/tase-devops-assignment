@@ -1,6 +1,6 @@
 # Requirements — Task 3: Bash `extract`
 
-## Assignment text (verbatim — do not edit)
+## Assignment text (verbatim)
 
 ```text
 BASH
@@ -29,27 +29,25 @@ decompressed
 
 ## Requirements matrix
 
-Status values: `Planned` → `In progress` → `Done`.
-
-| ID  | Requirement (from the assignment)                       | Implementation (planned)                         | Decision     | Test (bats)                              | Status  |
+| ID  | Requirement (from the assignment)                       | Implementation                                   | Decision     | How to verify (bats)                     | Status  |
 |-----|---------------------------------------------------------|--------------------------------------------------|--------------|------------------------------------------|---------|
-| R1  | Script named `extract`                                  | `3-bash-extract/extract`                         | —            | all tests run `tests/../extract`         | Done    |
-| R2  | Synopsis: `extract [-h] [-r] [-v] file [file...]`       | `parse_args` (`getopts ":hrv"`), `usage()`       | D-010        | usage / flag tests                       | Done    |
-| R3  | Detect the type only via `file` (names have no meaning) | `file -L -b --mime-type --`                      | D-001        | fixtures with misleading names           | Done    |
-| R4  | Invoke the right decompression command automatically   | `STREAM_TOOLS` / `ARCHIVE_TOOLS` lookup; `unpack_stream` / `unpack_archive` | D-001, D-002 | one test per method                      | Done    |
-| R5  | Put extracted files in the same folder                  | `output_name`; temp file / temp folder in the target's own folder (`unpack_stream` / `unpack_archive`) | D-002, D-003 | `output_name` / `unpack_stream` / `unpack_archive` tests | Done    |
-| R6  | Overwrite files with the same name                      | `mv -fT` (stream) / `cp -Rf --remove-destination` (zip) | D-005        | existing file is replaced (both kinds)   | Done    |
-| R7  | Support gunzip, bunzip2, unzip, uncompress              | 4 table entries (+ `application/x-gzip` alias)   | D-001, D-011 | gz / bz2 / zip / Z fixtures              | Done    |
-| R8  | Adding a method must be VERY simple                     | one line in a table + the `Supported:` help line (+ optional suffix in `output_name`) | D-002        | README shows how                         | Done    |
-| R9  | Not compressed → no other action on that file           | not in a table → count only, file untouched      | D-007        | plain file is unchanged                  | Done    |
-| R10 | Directory → decompress all files in it                  | `process_dir` (`find -maxdepth 1`)               | D-006        | folder without `-r`                      | Done    |
-| R11 | Echo the number of archives decompressed                | `decompressed` counter + final echo              | D-007        | stdout checked in tests                  | Done    |
-| R12 | Return the number of files NOT decompressed             | `not_decompressed` counter, capped at 255        | D-007, D-008 | exit code checked; cap test              | Done    |
-| R13 | `-v`: echo each decompressed, warn each NOT decompressed | `verbose` flag, warnings to stderr              | D-007        | `-v` output tests                        | Done    |
-| R14 | `-r`: traverse folders recursively                      | `find` without `-maxdepth` + nested archives     | D-006, D-009 | nested folders / archives, depth limit   | Done    |
-| R15 | `-h`: help notice                                       | `usage()`, exit 0                                | D-010        | `-h` test                                | Done    |
+| R-1  | Script named `extract`                                  | `3-bash-extract/extract`                         | —            | all tests run `tests/../extract`         | Done    |
+| R-2  | Synopsis: `extract [-h] [-r] [-v] file [file...]`       | `parse_args` (`getopts ":hrv"`), `usage()`       | D-010        | usage / flag tests                       | Done    |
+| R-3  | Detect the type only via `file` (names have no meaning) | `file -L -b --mime-type --`                      | D-001        | fixtures with misleading names           | Done    |
+| R-4  | Invoke the right decompression command automatically   | `STREAM_TOOLS` / `ARCHIVE_TOOLS` lookup; `unpack_stream` / `unpack_archive` | D-001, D-002 | one test per method                      | Done    |
+| R-5  | Put extracted files in the same folder                  | `output_name`; temp file / temp folder in the target's own folder (`unpack_stream` / `unpack_archive`) | D-002, D-003 | `output_name` / `unpack_stream` / `unpack_archive` tests | Done    |
+| R-6  | Overwrite files with the same name                      | `mv -fT` (stream) / `cp -Rf --remove-destination` (zip) | D-005        | existing file is replaced (both kinds)   | Done    |
+| R-7  | Support gunzip, bunzip2, unzip, uncompress              | 4 table entries (+ `application/x-gzip` alias)   | D-001, D-011 | gz / bz2 / zip / Z fixtures              | Done    |
+| R-8  | Adding a method must be VERY simple                     | one line in a table + the `Supported:` help line (+ optional suffix in `output_name`) | D-002        | README shows how                         | Done    |
+| R-9  | Not compressed → no other action on that file           | not in a table → count only, file untouched      | D-007        | plain file is unchanged                  | Done    |
+| R-10 | Directory → decompress all files in it                  | `process_dir` (`find -maxdepth 1`)               | D-006        | folder without `-r`                      | Done    |
+| R-11 | Echo the number of archives decompressed                | `decompressed` counter + final echo              | D-007        | stdout checked in tests                  | Done    |
+| R-12 | Return the number of files NOT decompressed             | `not_decompressed` counter, capped at 255        | D-007, D-008 | exit code checked; cap test              | Done    |
+| R-13 | `-v`: echo each decompressed, warn each NOT decompressed | `verbose` flag, warnings to stderr              | D-007        | `-v` output tests                        | Done    |
+| R-14 | `-r`: traverse folders recursively                      | `find` without `-maxdepth` + nested archives     | D-006, D-009 | nested folders / archives, depth limit   | Done    |
+| R-15 | `-h`: help notice                                       | `usage()`, exit 0                                | D-010        | `-h` test                                | Done    |
 
-## Interpretations of ambiguous points
+## Interpretations
 
 The assignment leaves some behavior open. Each interpretation is recorded in
 [DECISIONS.md](DECISIONS.md):

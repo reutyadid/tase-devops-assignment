@@ -18,3 +18,6 @@ target/
 .venv/
 2-ansible-docker/collections/
 .ansible/
+# Personal Claude Code files (shared ones are CLAUDE.md and .claude/settings.json)
+CLAUDE.local.md
+.claude/settings.local.json

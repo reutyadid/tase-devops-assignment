@@ -1,4 +1,4 @@
-# Troubleshooting
+# Troubleshooting — Task 1: Jenkins pipeline
 
 Real problems I hit while building this, and how I solved them.
 
@@ -49,7 +49,7 @@ Real problems I hit while building this, and how I solved them.
   not a permissions problem. The healthcheck does not show it: `/service/rest/v1/status/writable`
   returns 200 even while the EULA is not accepted.
 - **Fix:** accept the EULA once, through the UI or `POST /service/rest/v1/system/eula`. It is never
-  accepted on the reviewer's behalf: the setup script (chunk C4) does it only if `.env` has
+  accepted on the reviewer's behalf: `nexus/setup.sh` does it only if `.env` has
   `NEXUS_ACCEPT_EULA=true` (D-012).
 - **How to verify:**
   ```bash

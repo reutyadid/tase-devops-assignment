@@ -1,4 +1,4 @@
-# Decisions
+# Decisions — Task 3: Bash `extract`
 
 Each significant decision gets one entry. Newest at the bottom.
 
@@ -8,7 +8,7 @@ Each significant decision gets one entry. Newest at the bottom.
 
 - **Date:** 2026-11-12
 - **Context:** The type must be detected only through the `file` command; names and
-  extensions have no meaning (R3, R4, R7).
+  extensions have no meaning (R-3, R-4, R-7).
 - **Options considered:**
   1. `file -b --mime-type` — one fixed token (e.g. `application/gzip`) that can be an
      exact key in a lookup table / output changed once historically (`application/x-gzip`).
@@ -19,7 +19,7 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Decision:** `file -L -b --mime-type -- "$path"`. The old name `application/x-gzip` is an
   extra table entry pointing to the same tool. `--` protects names that start with `-`.
   `-L` follows a symlink given on the command line (D-006).
-- **Why:** The mime type is an exact table key, so adding a method stays one line (R8).
+- **Why:** The mime type is an exact table key, so adding a method stays one line (R-8).
 - **Trade-offs:** Zip-based formats with their own mime type (e.g. `.docx`) are not
   unzipped. We consider this the expected behavior.
 - **Verified on Ubuntu 24.04 (`file` 5.45):** gzip → `application/gzip`,
@@ -34,7 +34,7 @@ Each significant decision gets one entry. Newest at the bottom.
 
 - **Date:** 2026-11-12
 - **Context:** Some tools depend on the suffix: `gunzip report.txt` fails with
-  `unknown suffix -- ignored`. The script must work for any name (R3, R4, R5).
+  `unknown suffix -- ignored`. The script must work for any name (R-3, R-4, R-5).
 - **Options considered:**
   1. Stream tools write to stdout (`-c`) and we save the output ourselves; zip extracts
      into a folder — works for any name, keeps the original, we control the output name.
@@ -98,9 +98,9 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-003: Output file name for stream tools
 
 - **Date:** 2026-11-12
-- **Context:** With `-c` the tool no longer chooses the output name, so we must (R5, R6).
+- **Context:** With `-c` the tool no longer chooses the output name, so we must (R-5, R-6).
   The name must be deterministic, otherwise "files with the same name are overwritten"
-  (R6) would never happen.
+  (R-6) would never happen.
 - **Options considered:**
   1. Strip a known compression suffix (`.gz`, `.bz2`, `.Z`); if there is none, add `.out`
      — consistent for all tools; same convention as bunzip2.
@@ -118,7 +118,7 @@ Each significant decision gets one entry. Newest at the bottom.
     `.out` is added instead: `.gz.out`, `..gz.out`. Otherwise the output would be a folder.
   - If the output name is an existing **folder** (`logs.gz` next to a folder `logs/`),
     the archive counts as NOT decompressed with a warning, like the zip case in D-005.
-    Without this check `mv` would move the file *into* the folder. Implemented in chunk 4.
+    Without this check `mv` would move the file *into* the folder.
 - **Why:** Predictable; uses the same idea as the tools (remove the suffix, or add `.out`
   like bunzip2), but only for the three main suffixes. The tools know more
   (e.g. gunzip: `.tgz` → `.tar`, `.z`, `-gz`; bunzip2: `.tbz2`, `.bz`); we keep the list
@@ -149,7 +149,7 @@ Each significant decision gets one entry. Newest at the bottom.
   3. Move it to another folder — not requested; name clashes with `-r`; standard tools
      never do this.
 - **Decision:** Keep the original archive exactly where it is.
-- **Why:** Least surprise and safest. R9 suggests touching nothing beyond what is needed.
+- **Why:** Least surprise and safest. R-9 suggests touching nothing beyond what is needed.
 - **Trade-offs:** The folder holds both the archive and the extracted files.
 
 ---
@@ -157,7 +157,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-005: Overwrite behavior and permissions
 
 - **Date:** 2026-11-12
-- **Context:** Existing files must be overwritten (R6) and the script must never stop to
+- **Context:** Existing files must be overwritten (R-6) and the script must never stop to
   ask a question.
 - **Decision:**
   - The tools always write into a new, empty place (D-002). Overwriting is done by
@@ -183,7 +183,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-006: Walk folders with `find` + `mapfile`; symlink policy
 
 - **Date:** 2026-11-12
-- **Context:** Directories must be processed (R10); with `-r` the whole tree (R14).
+- **Context:** Directories must be processed (R-10); with `-r` the whole tree (R-14).
   Names can contain spaces or newlines, start with a dot, folders can be empty, and
   symlinks can create loops.
 - **Options considered:**
@@ -217,7 +217,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-007: What counts as decompressed / NOT decompressed
 
 - **Date:** 2026-11-12
-- **Context:** R11 asks for the number of archives decompressed; R12 for the number of
+- **Context:** R-11 asks for the number of archives decompressed; R-12 for the number of
   files NOT decompressed. The assignment does not define edge cases.
 - **Decision:** One rule: every item the user asked for (directly or through a folder)
   that was not fully decompressed is counted. Folders are containers and are not counted.
@@ -249,12 +249,12 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-008: Exit code above 255
 
 - **Date:** 2026-11-12
-- **Context:** R12 returns a count, but exit codes are 0–255 and wrap around
+- **Context:** R-12 returns a count, but exit codes are 0–255 and wrap around
   (verified: `exit 256` → 0, `exit 300` → 44). 256 failures would look like success.
 - **Options considered:**
   1. Cap at 255 — 0 always means full success / exact count lost above 255.
   2. Plain `exit $n` — wraps; rejected.
-  3. Exit 1 on any failure — contradicts R12; rejected.
+  3. Exit 1 on any failure — contradicts R-12; rejected.
 - **Decision:** Cap at 255. When the cap is applied, print a warning to stderr even
   without `-v` (e.g. `Warning: 300 files were not decompressed (exit code capped at 255)`),
   because it is about the exit code itself, not about a single file. Documented in README.
@@ -298,7 +298,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-010: Argument parsing and error handling
 
 - **Date:** 2026-11-12
-- **Context:** Synopsis `extract [-h] [-r] [-v] file [file...]` (R2, R15); one failing file
+- **Context:** Synopsis `extract [-h] [-r] [-v] file [file...]` (R-2, R-15); one failing file
   must not stop the whole run.
 - **Options considered (parsing):**
   1. `getopts` builtin — standard, short options, handles `-rv`.
@@ -329,7 +329,7 @@ Each significant decision gets one entry. Newest at the bottom.
 ## D-011: Dependencies
 
 - **Date:** 2026-11-12
-- **Context:** The script calls external tools (R7); some are missing on a clean
+- **Context:** The script calls external tools (R-7); some are missing on a clean
   Ubuntu 24.04.
 - **Findings:** On Debian/Ubuntu, `uncompress` is part of the `gzip` package (a wrapper
   around `gzip -d`). The `ncompress` package provides `compress` and installs its own

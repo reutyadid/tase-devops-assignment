@@ -1,4 +1,4 @@
-# Decisions
+# Decisions — Task 2: Ansible and Docker
 
 Each significant decision gets one entry. Newest at the bottom.
 
@@ -281,7 +281,7 @@ Each significant decision gets one entry. Newest at the bottom.
     save forks the process.
   - `restart: unless-stopped` on every service: a crashed or OOM-killed container, and the
     whole app after a Docker restart, come back on their own. Not required by the task;
-    approved as a one-line resilience default.
+    a one-line resilience default.
   - No `become`/`sudo` in the playbook (D-013).
 - **Why:** Least privilege at every layer with only a few lines of YAML.
 - **Trade-offs:** None significant.

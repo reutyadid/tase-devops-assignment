@@ -1,4 +1,4 @@
-# Task 3: `extract` (Bash)
+# Task 3 — Bash: the `extract` script
 
 A Bash script that unpacks gzip, bzip2, zip and compress files. It chooses the tool from
 the **content** of each file (the `file` command), never from its name or extension. It
@@ -74,7 +74,7 @@ shellcheck -x extract tests/*.bats tests/test_helper.bash   # expected: no outpu
 bats tests/unpack_archive.bats                  # run one topic only
 ```
 
-## How to add a new method (R8)
+## How to add a new method (R-8)
 
 1. Add one line to a table in `extract`:
    - one file in → one file out (the tool supports `-c`):
