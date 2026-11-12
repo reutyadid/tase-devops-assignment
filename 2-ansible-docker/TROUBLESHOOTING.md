@@ -37,7 +37,8 @@ Real problems I hit while building this, and how I solved them.
   ```
 - **Root cause:** In WSL with Docker Desktop stopped, `docker info` does not fail. It waits
   for the daemon with no time limit, so the next task (the clear error message) never ran.
-- **Fix:** The task runs `timeout 20 docker info` (`playbook.yml`). After 20 seconds
+- **Fix:** The task runs `timeout -k 5 20 docker info` (`playbook.yml`; 20 is the variable
+  `docker_check_timeout` in `group_vars/all.yml`). After 20 seconds
   `timeout` stops the command with exit code 124, and the playbook fails with the message
   "Docker is not reachable ... Exit code 124 (124 = no answer within 20s)" (D-006).
   If you see this message: start Docker Desktop, wait until it shows "Engine running", and run

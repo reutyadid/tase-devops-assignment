@@ -35,6 +35,7 @@ Why three containers for "two services": [DECISIONS.md D-001](DECISIONS.md).
   (tested with Docker Engine 29.9.3 from Docker Desktop). Docker Desktop on Windows:
   enable WSL integration for your distro. Check with `docker info`.
 - Python 3.12 or newer with the `venv` module (`sudo apt install python3-venv` on Ubuntu).
+- GNU coreutils `timeout` (standard on Linux and WSL; not installed by default on macOS).
 - Free port `8080` on the host.
 
 Ansible itself is **not** a prerequisite. It is installed into a local venv in the next step.
@@ -65,12 +66,13 @@ ansible-playbook playbook.yml
 In a new terminal, activate the venv again first: `source .venv/bin/activate`.
 If something fails, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-The first run builds the images and takes a few minutes. Expected end of the output:
+The first run builds the images and takes a few minutes. Expected end of the output
+(`N` depends on earlier runs: the count is kept in a volume; `changed` is 4 on a new machine):
 
 ```
 TASK [Check the page and the counter] ****
 ok: [localhost] => {
-    "msg": "OK: Hello World is served, hit count 1 -> 2."
+    "msg": "OK: Hello World is served, hit count N -> N+1."
 }
 
 PLAY RECAP ****
@@ -137,7 +139,7 @@ needs no install. Details: D-011.
 
 ## What the playbook does
 
-1. **Pre-flight** — `docker info` (with a 20s timeout). If Docker is not reachable, it stops
+1. **Pre-flight** — `docker info` (with a 20s timeout, `docker_check_timeout`). If Docker is not reachable, it stops
    with a clear message. Docker is checked, not installed (D-006).
 2. **Copy** — creates `~/hello-counter` and copies the source files of `web` and `counter`
    (no `sudo` needed, D-013).

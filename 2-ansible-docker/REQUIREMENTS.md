@@ -27,7 +27,7 @@ of the assignment text. Each `N-*` row was explicitly approved during planning.
 | N-2 | Idempotent: a second run reports no changes | `docker_compose_v2` module, `build: always` relies on the build cache | D-007, D-008 | Second run: `changed=0` (the self-check still adds 2 hits, see D-008) | Done |
 | N-3 | Playbook verifies the deployment itself | `wait: true` on the compose task, then `uri` + `assert` tasks | D-008 | Playbook output shows the count increased | Done |
 | N-4 | Docker is a prerequisite and is checked, not installed | Pre-flight `docker info` task; the module itself enforces Compose >= 2.18 | D-006 | Stop Docker Desktop → playbook fails within ~20s with a clear message | Done |
-| N-5 | Security: pinned versions, non-root containers, only the web port published, no secrets in the repo | Dockerfiles, compose template, two networks (`backend` is internal) | D-009, D-010 | `hadolint`, `docker compose exec web id`, `docker compose ps` ports | In progress |
+| N-5 | Security: pinned versions, non-root containers, only the web port published, no secrets in the repo | Dockerfiles, compose template, two networks (`backend` is internal) | D-009, D-010 | `hadolint`, `docker exec hello-counter-web-1 id` (uid 10001), `docker compose ps` ports | Done |
 | N-6 | Independent of tasks 1 and 3 (no Jenkins, no Nexus) | Images are built on the target by Compose | D-008 | No references to other task folders | Done |
 
 ## Interpretations

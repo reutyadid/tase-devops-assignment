@@ -166,7 +166,7 @@ Each significant decision gets one entry. Newest at the bottom.
   `docker info` and fails with a clear message (for example "Docker Desktop is not running or
   WSL integration is off"). The Compose version is not checked by us: the
   `docker_compose_v2` module already fails if Compose is older than 2.18.
-  The check runs as `timeout 20 docker info`: in testing, with Docker Desktop stopped,
+  The check runs as `timeout -k 5 20 docker info` (20 = `docker_check_timeout`): in testing, with Docker Desktop stopped,
   `docker info` in WSL hung instead of failing, so the playbook never reached the message.
 - **Why:** Safe for the reviewer's machine; no root needed.
 - **Trade-offs:** Not a full "bare server" setup. Production note: a separate role installs
@@ -315,7 +315,7 @@ Each significant decision gets one entry. Newest at the bottom.
   - `hadolint` runs from its pinned image `hadolint/hadolint:v2.15.1`, so nothing extra is
     installed. Its rule DL3066 led to a numeric user and group in the Dockerfiles
     (`USER 10001:10001`): platforms such as Kubernetes can verify "not root" only for a
-    numeric UID. The GID is fixed too, otherwise `useradd --system` picks one (999).
+    numeric UID. The GID is fixed too, otherwise `useradd` picks a free one (it picked 999).
 - **Pinning level:** The full environment is pinned, not only direct dependencies.
   1. Direct only (`ansible-core==2.21.6`) — the right style for a library, but a later install
      can pull newer, untested versions of Jinja2, cryptography, etc.
