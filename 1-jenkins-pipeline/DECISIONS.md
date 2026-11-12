@@ -97,6 +97,10 @@ Each significant decision gets one entry. Newest at the bottom.
   - Filter: `regexpFilterText: '$WEBHOOK_REF $WEBHOOK_AFTER'` must match
     `^refs/heads/main (?!0{40})[0-9a-f]{40}$`: only pushes to `main`, and not a branch deletion
     (GitHub sends `after` = 40 zeros and no `head_commit` for a deletion).
+  - No path filter: this repository holds three tasks, so a push to `main` that changes only
+    task 2 or task 3 also starts a build. The build still succeeds (it builds the unchanged app
+    and uploads a new version). Not required by the task; kept simple on purpose. In production:
+    one repository per application, or a path filter on the changed files.
   - Token: Secret text credential `gwt-token` (`tokenCredentialId`), value from `.env` as a
     Docker secret. smee-client reads it, and the channel URL, from Docker secret files at start
     and puts the token in the target URL (`?token=...`). Neither value is in `docker inspect`.

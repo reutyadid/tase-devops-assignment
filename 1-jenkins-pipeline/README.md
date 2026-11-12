@@ -223,6 +223,9 @@ See [DECISIONS.md](DECISIONS.md). Key points:
 - **Nexus URL per environment.** Here `http://nexus:8081` is written in `app/pom.xml` and
   `app/settings.xml` (one environment, two lines next to each other). In production the URL
   comes from the CI configuration per environment, and Nexus is served over HTTPS.
+- **Builds on every push to `main`.** The trigger filters by branch, not by folder, so a push
+  that changes only another task in this repository also starts a build (D-002). In production:
+  one repository per application, or a path filter on the changed files.
 - **Webhook endpoint.** smee.io is a development relay. In production: an inbound HTTPS endpoint
   for Jenkins and HMAC verification of GitHub's `X-Hub-Signature-256` (D-002).
 - **Agent host keys and secrets.** Here the agent's SSH host key is not verified and the private
