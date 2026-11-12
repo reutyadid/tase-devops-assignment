@@ -51,6 +51,16 @@ Each significant decision gets one entry. Newest at the bottom.
   Without a timeout, `urllib` waits forever, so a stuck `counter` would block both gunicorn
   workers and take the whole page down.
 - **Trade-offs:** No reverse proxy. Production note in the README: put Nginx in front.
+  - No exactly-once counting: if `web` times out after 2s while `counter` still finishes
+    `INCR`, the user sees 503 but the hit is counted. Exactly-once needs idempotency keys,
+    which is out of scope. `counter` keeps its own Redis timeouts at 1s and disables
+    redis-py's automatic retries (default: 10 retries) to make this rare and to avoid
+    counting one hit twice.
+  - Flask answers `HEAD` on every `GET` route, so `HEAD /` also adds a hit. Nothing in this
+    project sends `HEAD /` (healthchecks use `/healthz`, the self-check uses `GET`), so this
+    is documented, not handled in code.
+  - `web` calls `counter` through an opener with no proxy, so an `HTTP_PROXY` set by Docker
+    Desktop on a corporate machine cannot break the internal call.
 - **Sources:**
   - https://flask.palletsprojects.com/en/stable/deploying/
 
@@ -69,7 +79,9 @@ Each significant decision gets one entry. Newest at the bottom.
   Versions are pinned in each app's `requirements.txt`.
 - **Why:** The Flask docs say the development server must not be used in production.
   gunicorn is the first WSGI server listed in the Flask deployment docs.
-- **Trade-offs:** None significant for this size.
+- **Trade-offs:** Each service has its own fully pinned `requirements.txt` (separate build
+  contexts), so the shared Flask/gunicorn pins appear in both files. An upgrade must update
+  both.
 - **Sources:**
   - https://flask.palletsprojects.com/en/stable/deploying/
   - https://flask.palletsprojects.com/en/stable/deploying/gunicorn/
