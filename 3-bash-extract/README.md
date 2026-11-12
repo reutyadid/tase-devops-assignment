@@ -70,7 +70,8 @@ cat /tmp/report.txt.out                         # hello
 ```bash
 cd 3-bash-extract
 bats tests                                      # expected: 1..66, all "ok"
-shellcheck -x extract tests/extract.bats        # expected: no output, exit 0
+shellcheck -x extract tests/*.bats tests/test_helper.bash   # expected: no output, exit 0
+bats tests/unpack_archive.bats                  # run one topic only
 ```
 
 ## How to add a new method (R8)
@@ -88,7 +89,14 @@ shellcheck -x extract tests/extract.bats        # expected: no output, exit 0
 ```
 3-bash-extract/
 ├── extract              # the script
-├── tests/extract.bats   # bats tests (fixtures are created at test time)
+├── tests/
+│   ├── test_helper.bash     # shared setup and fixture helpers (fixtures are created at test time)
+│   ├── options.bats         # -h, -r, -v, usage errors
+│   ├── detect_type.bats     # type detection + tool tables
+│   ├── output_name.bats     # output file name for stream tools
+│   ├── unpack_stream.bats   # gunzip / bunzip2 / uncompress
+│   ├── unpack_archive.bats  # unzip
+│   └── main.bats            # the whole script: counting, folders, -r, nesting
 ├── REQUIREMENTS.md      # assignment text + requirements matrix
 ├── DECISIONS.md         # design decisions (D-001 ... D-012)
 ├── TROUBLESHOOTING.md   # real problems and fixes (T-001 ... T-006)

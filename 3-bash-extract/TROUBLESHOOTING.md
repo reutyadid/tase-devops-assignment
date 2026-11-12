@@ -39,10 +39,14 @@ Real problems I hit while building this, and how I solved them.
     command; to apply it to the whole file it must come before the first command.
 - **Fix:**
   - `extract`: `# shellcheck disable=SC2034` only above the `getopts` loop (not file-wide,
-    so typos in other variables are still caught), marked TEMPORARY (remove in chunk 6).
-  - `extract.bats`: file-wide `disable=SC2154` with a comment explaining why, and
-    `# shellcheck source-path=SCRIPTDIR` so `source=../extract` is resolved from the test file.
-- **How to verify:** `shellcheck -x 3-bash-extract/extract 3-bash-extract/tests/extract.bats`
+    so typos in other variables are still caught). It was temporary and was removed once
+    the variables were used.
+  - The `.bats` files: file-wide `disable=SC2154` with a comment explaining why (after the
+    tests were split into several files, also `SC2034`: `$verbose` is set in a test and
+    read by the sourced script, which ShellCheck cannot see from another file), and
+    `# shellcheck source-path=SCRIPTDIR` (now in `test_helper.bash`) so `source=../extract`
+    is resolved from the test folder.
+- **How to verify:** `shellcheck -x 3-bash-extract/extract 3-bash-extract/tests/*.bats 3-bash-extract/tests/test_helper.bash`
   → no output, exit 0 (also when run from inside `3-bash-extract/`).
 - **Lesson:** Disable a ShellCheck rule only with a comment that says why, and as narrowly
   as possible.

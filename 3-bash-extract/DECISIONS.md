@@ -362,11 +362,15 @@ Each significant decision gets one entry. Newest at the bottom.
   helper libraries (`bats-assert`, `bats-support`). Fixtures are generated at test time
   with misleading names (nothing binary is committed). Each test creates its own fixtures
   in its own `$BATS_TEST_TMPDIR` (in `setup`/per test, not once in `setup_file`), so a test
-  that extracts or overwrites files cannot affect another test. `shellcheck` runs on the
-  script and the tests.
+  that extracts or overwrites files cannot affect another test.
+  One `.bats` file per topic (options, detect_type, output_name, unpack_stream,
+  unpack_archive, main) and a shared `tests/test_helper.bash` loaded with `load`, as in
+  the bats-core tutorial. `bats tests` runs them all; one topic can run alone.
+  `shellcheck` runs on the script and the tests.
 - **Why:** Industry standard for testing shell scripts; readable tests.
 - **Trade-offs:** One more dependency; must understand how `run` works.
 - **Open:** GitHub Actions (shellcheck + bats on push) — to be decided at the end.
 - **Sources:** [bats-core](https://github.com/bats-core/bats-core),
   [bats-core docs](https://bats-core.readthedocs.io/en/stable/),
+  [bats-core tutorial](https://bats-core.readthedocs.io/en/stable/tutorial.html),
   [bats (noble)](https://packages.ubuntu.com/noble/bats)
