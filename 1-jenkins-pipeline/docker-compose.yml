@@ -42,6 +42,7 @@ services:
       - jenkins_admin_password
       - nexus_deploy_password
       - agent_ssh_key
+      - gwt_token
     mem_limit: 1g
     ports:
       - "127.0.0.1:8080:8080"
@@ -62,6 +63,21 @@ services:
       JENKINS_AGENT_SSH_PUBKEY: ${JENKINS_AGENT_SSH_PUBKEY:?set in .env}
     mem_limit: 1g
 
+  # Forwards GitHub webhooks from the public smee.io channel to Jenkins (D-002).
+  # Outbound connection only: no port is published.
+  smee:
+    build: ./smee
+    image: tase-smee-client:local
+    command:
+      - --url
+      - ${SMEE_URL:?set in .env}
+      - --target
+      - http://jenkins:8080/generic-webhook-trigger/invoke?token=${GWT_TOKEN:?set in .env}
+    depends_on:
+      - jenkins
+    mem_limit: 128m
+    restart: unless-stopped
+
 # Docker secrets: mounted as files in /run/secrets/ and read by casc.yaml.
 # Not visible in `docker inspect`, unlike environment variables.
 secrets:
@@ -69,6 +85,8 @@ secrets:
     environment: JENKINS_ADMIN_PASSWORD
   nexus_deploy_password:
     environment: NEXUS_DEPLOY_PASSWORD
+  gwt_token:
+    environment: GWT_TOKEN
   agent_ssh_key:
     # A bind mount keeps the host owner and mode: the file must be readable by uid 1000
     # (jenkins in the container), so it is chmod 644 (D-006).

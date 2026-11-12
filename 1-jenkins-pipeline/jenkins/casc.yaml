@@ -54,6 +54,12 @@ credentials:
               username: "${NEXUS_DEPLOY_USER}"
               password: "${readFile:/run/secrets/nexus_deploy_password}"
               description: Nexus deploy user (maven-releases only)
+          # Token that the webhook URL must carry to trigger the job (D-002).
+          - string:
+              scope: GLOBAL
+              id: gwt-token
+              secret: "${readFile:/run/secrets/gwt_token}"
+              description: Generic Webhook Trigger token
 
 unclassified:
   location:

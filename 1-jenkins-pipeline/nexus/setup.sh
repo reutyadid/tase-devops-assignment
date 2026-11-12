@@ -27,13 +27,13 @@ source ./.env
 set +a
 
 for var in NEXUS_ACCEPT_EULA NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_USER NEXUS_DEPLOY_PASSWORD \
-           JENKINS_ADMIN_PASSWORD GIT_REPO_URL JENKINS_AGENT_SSH_PUBKEY; do
+           JENKINS_ADMIN_PASSWORD GIT_REPO_URL JENKINS_AGENT_SSH_PUBKEY SMEE_URL GWT_TOKEN; do
   [[ -n "${!var:-}" ]] || die "$var is not set in .env"
 done
 # Passwords: letters, digits and . _ - only, at least 12 characters. Other characters
 # ($, quotes, backslash, ...) are read differently by bash, Docker Compose, JSON and curl.
 # Generate one with: openssl rand -hex 16
-for var in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD JENKINS_ADMIN_PASSWORD; do
+for var in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD JENKINS_ADMIN_PASSWORD GWT_TOKEN; do
   [[ "${!var}" != "change-me" ]] || die "$var is still 'change-me' in .env"
   [[ "${!var}" =~ ^[a-zA-Z0-9._-]{12,}$ ]] \
     || die "$var must be at least 12 characters: letters, digits, . _ - only"
@@ -41,6 +41,8 @@ done
 [[ "$NEXUS_DEPLOY_USER" =~ ^[a-zA-Z0-9._-]+$ ]] || die "NEXUS_DEPLOY_USER has invalid characters"
 [[ "$GIT_REPO_URL" == https://* && "$GIT_REPO_URL" != *YOUR-USER* ]] \
   || die "GIT_REPO_URL must be the https URL of your GitHub repository"
+[[ "$SMEE_URL" =~ ^https://smee\.io/[A-Za-z0-9]+$ && "$SMEE_URL" != *CHANGE-ME* ]] \
+  || die "SMEE_URL must be your channel URL from https://smee.io"
 [[ -r secrets/agent_key ]] || die "secrets/agent_key not found. See the SSH key steps in .env.example"
 
 # The EULA is a legal agreement: never accept it on the user's behalf.

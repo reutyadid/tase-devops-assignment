@@ -33,6 +33,13 @@ def call() {
         ]
     }
 
+    // The job checks out the head of main when the build starts. If a newer push moved main
+    // in the meantime, this build would build a different commit than the webhook names.
+    // Stop instead of writing a wrong commit into the manifest; the newer push has its own build.
+    if (fromWebhook && env.GIT_COMMIT != scm.SCM_COMMIT) {
+        error("prepareEnv: webhook commit ${scm.SCM_COMMIT} is not the checked-out commit ${env.GIT_COMMIT}")
+    }
+
     // Without these two, the build cannot say what was built or who committed it (R-8).
     if (!scm.SCM_COMMIT?.trim() || !scm.SCM_COMMITTER?.trim()) {
         error("prepareEnv: SCM_COMMIT or SCM_COMMITTER is empty (source: ${fromWebhook ? 'webhook' : 'git'})")
