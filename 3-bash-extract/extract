@@ -1,0 +1,420 @@
+#!/usr/bin/env bash
+# extract - unpack archives by their content type, not by their name.
+# See README.md for usage and DECISIONS.md for design decisions.
+
+# Options (set by parse_args)
+verbose=0
+recursive=0
+
+# Counters (D-007). The script prints the first and returns the second.
+decompressed=0
+not_decompressed=0
+
+# Archives inside archives are unpacked (with -r) up to this depth (D-009).
+# Depth 1 = an archive given by the user or found in a folder.
+MAX_DEPTH=3
+
+# Items created by the last successful unpack_stream / unpack_archive call.
+# Used to look for archives inside archives (D-009).
+CREATED=()
+
+# The temp file/folder being written right now ("" = none). cleanup() removes it
+# if the script stops in the middle (error, Ctrl+C).
+TMP_PATH=""
+
+# --- Supported types: mime type (from `file`) -> how to unpack -------------------
+# To add a method, add one line to one of these tables, and add the type to the
+# "Supported:" line in usage() (that list is written by hand, see D-002).
+# Optional for a stream tool: add its suffix to output_name (else: <name>.out).
+# declare -A = associative array (keys are strings). -g = global, so the tables
+# stay global even when this file is sourced from inside a function (tests).
+
+# Stream tools: one file in -> one file out. Value = a tool that supports -c (stdout).
+declare -gA STREAM_TOOLS=(
+    [application/gzip]="gunzip"
+    [application/x-gzip]="gunzip"          # older versions of `file`
+    [application/x-bzip2]="bunzip2"
+    [application/x-compress]="uncompress"
+)
+
+# Archive tools: one file in -> many files out. Value = a function below
+# that takes: $1 = archive, $2 = folder to extract into.
+declare -gA ARCHIVE_TOOLS=(
+    [application/zip]="unpack_zip"
+)
+
+# -o: overwrite without asking (D-005).
+# -P '': an encrypted zip fails at once instead of waiting for a password.
+# $1 never starts with "-" (unpack_archive adds "./"), because unzip has no "--".
+unpack_zip() {
+    unzip -o -q -P '' "$1" -d "$2"
+}
+
+# Print the mime type of a file, based on its content (never its name).
+# -L: follow a symlink and report the type of the file it points to (D-006).
+detect_type() {
+    file -L -b --mime-type -- "$1"
+}
+
+# Print the output path for a stream tool (D-003):
+# remove a .gz / .bz2 / .Z suffix; if there is none, add .out.
+# The suffix only chooses the name. The type was already found by detect_type.
+output_name() {
+    local path="$1"
+    local base=""
+
+    # ${path%.gz} = $path without ".gz" at the end
+    case "$path" in
+        *.gz)  base="${path%.gz}" ;;
+        *.bz2) base="${path%.bz2}" ;;
+        *.Z)   base="${path%.Z}" ;;
+    esac
+
+    # ${base##*/} = the last part of the path (everything after the last "/").
+    local name="${base##*/}"
+
+    # No known suffix, or no real file name left after removing it:
+    # ".gz" -> "", "dir/.gz" -> "", "..gz" -> "." (this folder), "...gz" -> ".." (parent).
+    # printf, not echo: echo would read a name like "-n" as an option.
+    if [[ -z "$name" || "$name" == "." || "$name" == ".." ]]; then
+        printf '%s\n' "$path.out"
+    else
+        printf '%s\n' "$base"
+    fi
+}
+
+# Unpack one file with a stream tool, next to the file (D-002, D-003, D-005).
+# $1 = file, $2 = tool (from STREAM_TOOLS). Returns 0 on success, 1 on failure.
+unpack_stream() {
+    local file="$1"
+    local tool="$2"
+    local dir out
+    dir=$(dirname -- "$file")
+    out=$(output_name "$file")
+
+    if ! command -v "$tool" >/dev/null; then
+        warn "$file: '$tool' is not installed"
+        return 1
+    fi
+    if [[ -d "$out" ]]; then
+        warn "$file: '$out' is a folder, cannot overwrite it"
+        return 1
+    fi
+
+    # The error text of the commands below is hidden (2>/dev/null);
+    # warn() prints our own message instead, only with -v.
+
+    # An empty temp file in the same folder, so the final mv is a rename.
+    if ! TMP_PATH=$(mktemp -- "$dir/.extract.XXXXXX" 2>/dev/null); then
+        warn "$file: cannot create a temp file in '$dir'"
+        TMP_PATH=""
+        return 1
+    fi
+
+    # "< file": the tool reads only the content and never sees the name.
+    # 2>/dev/null comes first: redirections run left to right, so an error while
+    # opening "$file" is hidden too.
+    # Any non-zero exit code is a failure (gzip uses 2 for warnings, too).
+    if ! "$tool" -c 2>/dev/null < "$file" > "$TMP_PATH"; then
+        warn "$file: '$tool' failed"
+        cleanup
+        return 1
+    fi
+
+    # mktemp creates rw------- files; give the output the archive's permissions.
+    # mv -T: never move into a folder, even if one appeared after the check above.
+    if ! chmod --reference="$file" -- "$TMP_PATH" 2>/dev/null ||
+       ! mv -fT -- "$TMP_PATH" "$out" 2>/dev/null; then
+        warn "$file: could not write '$out'"
+        cleanup
+        return 1
+    fi
+    TMP_PATH=""   # renamed: nothing left to clean up
+    CREATED=("$out")
+}
+
+# Unpack one file with an archive tool, into the file's folder (D-002, D-005).
+# $1 = file, $2 = function (from ARCHIVE_TOOLS). Returns 0 on success, 1 on failure.
+unpack_archive() {
+    local file="$1"
+    local func="$2"
+    local dir name item
+    dir=$(dirname -- "$file")
+    name=$(basename -- "$file")
+
+    # Tools like unzip and find have no "--": a name that starts with "-" would be
+    # read as an option. "./" in front of a relative path avoids it, for every method.
+    local safe_file="$file"
+    local safe_dir="$dir"
+    if [[ "$file" != /* ]]; then
+        safe_file="./$file"
+        safe_dir="./$dir"
+    fi
+
+    # An empty temp folder next to the archive. If the tool fails, nothing is written
+    # to $dir. (The copy at the end is not all-or-nothing, see D-002.)
+    if ! TMP_PATH=$(mktemp -d -- "$safe_dir/.extract.XXXXXX" 2>/dev/null); then
+        warn "$file: cannot create a temp folder in '$dir'"
+        TMP_PATH=""
+        return 1
+    fi
+
+    # </dev/null: the tool can never wait for input.
+    # Any non-zero exit code is a failure (unzip uses 1 for warnings, e.g. an empty zip).
+    if ! "$func" "$safe_file" "$TMP_PATH" </dev/null >/dev/null 2>&1; then
+        warn "$file: '$func' failed"
+        cleanup
+        return 1
+    fi
+
+    # The archive must stay in place (D-004): refuse an entry with its own name.
+    if [[ -e "$TMP_PATH/$name" || -L "$TMP_PATH/$name" ]]; then
+        warn "$file: contains an entry with the archive's own name"
+        cleanup
+        return 1
+    fi
+
+    # Remember the files this archive created (from the temp folder, not from $dir,
+    # so files that were already in $dir are not included). Used by D-009.
+    # %P = the path inside the temp folder. Symlinks are not included (-type f).
+    CREATED=()
+    while IFS= read -r -d '' item; do
+        CREATED+=("$dir/$item")
+    done < <(find "$TMP_PATH" -type f -printf '%P\0')
+
+    # Copy what is INSIDE the temp folder, item by item ({} + = all items in one cp).
+    # Not "cp -a $TMP_PATH/.": -a copies folder permissions onto existing folders
+    # (T-005). -R without -a keeps the permissions of folders that already exist.
+    # --remove-destination: replace an existing symlink instead of writing through it.
+    if ! find "$TMP_PATH" -mindepth 1 -maxdepth 1 \
+            -exec cp -Rf --remove-destination --preserve=timestamps \
+                  -t "$safe_dir" -- {} + 2>/dev/null; then
+        warn "$file: could not write all files (e.g. a file and a folder with the same name)"
+        cleanup
+        return 1
+    fi
+    cleanup
+}
+
+# --- Processing and counting (D-007, D-009) ---------------------------------------
+
+# Count one item as NOT decompressed, and warn why (with -v).
+not_done() {
+    warn "$1"
+    not_decompressed=$((not_decompressed + 1))
+}
+
+# Process one file.
+# $1 = path, $2 = archive depth (1 = given or found in a folder),
+# $3 = 1 if the file came out of an archive (then plain files are not counted, D-007).
+process_file() {
+    local file="$1"
+    local depth="$2"
+    local from_archive="${3:-0}"
+    local type tool func
+
+    if [[ ! -e "$file" ]]; then
+        not_done "$file: no such file"
+        return
+    fi
+    if [[ ! -r "$file" ]]; then
+        not_done "$file: cannot read it (permission denied)"
+        return
+    fi
+
+    type=$(detect_type "$file")
+    # ":-" = empty if the type is not in the table (no error with "set -u").
+    tool="${STREAM_TOOLS[$type]:-}"
+    func="${ARCHIVE_TOOLS[$type]:-}"
+
+    if [[ -z "$tool" && -z "$func" ]]; then
+        if (( ! from_archive )); then
+            not_done "$file: not compressed, or not a supported type ($type)"
+        fi
+        return
+    fi
+    if (( from_archive && ! recursive )); then
+        not_done "$file: archive inside an archive, not unpacked (use -r)"
+        return
+    fi
+    if (( depth > MAX_DEPTH )); then
+        not_done "$file: archive nested deeper than $MAX_DEPTH levels, not unpacked"
+        return
+    fi
+
+    # Choose the unpack function, then call it once.
+    # The unpack functions print their own warning; here we only count.
+    local method="unpack_archive"
+    local how="$func"
+    if [[ -n "$tool" ]]; then
+        method="unpack_stream"
+        how="$tool"
+    fi
+    if ! "$method" "$file" "$how"; then
+        not_decompressed=$((not_decompressed + 1))
+        return
+    fi
+
+    decompressed=$((decompressed + 1))
+    if (( verbose )); then
+        echo "extract: decompressed: $file"
+    fi
+    check_created "$depth"
+}
+
+# Look for archives inside the files that were just created (D-009).
+# process_file decides: plain file -> ignored, archive -> unpacked (-r) or counted.
+# $1 = depth of the archive that created them.
+check_created() {
+    local depth="$1"
+    local -a files=("${CREATED[@]}")   # copy: the next unpack changes CREATED
+    local file
+
+    for file in "${files[@]}"; do
+        process_file "$file" $((depth + 1)) 1
+    done
+}
+
+# Process the files in a folder: only its direct children, or the whole tree with -r.
+process_dir() {
+    local dir="$1"
+    local -a paths
+    local path
+
+    # find has no "--"; "./" protects a relative folder name that starts with "-".
+    if [[ "$dir" != /* ]]; then
+        dir="./$dir"
+    fi
+
+    # -H: follow the folder itself if it is a symlink given by the user, nothing else.
+    # The list is read first (no pipe, D-006), so new files are not picked up.
+    local -a depth_limit=(-maxdepth 1)
+    if (( recursive )); then
+        depth_limit=()
+    fi
+    # 2>/dev/null: errors are handled below (unreadable folders are counted).
+    mapfile -d '' -t paths < <(find -H "$dir" -mindepth 1 "${depth_limit[@]}" ! -type d -print0 2>/dev/null)
+
+    for path in "${paths[@]}"; do
+        if [[ -L "$path" ]]; then
+            not_done "$path: symlink inside a folder, not followed"
+        else
+            process_file "$path" 1
+        fi
+    done
+
+    # Without -r, subfolders are not entered and not counted; only a note with -v.
+    if (( ! recursive )); then
+        mapfile -d '' -t paths < <(find -H "$dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+        for path in "${paths[@]}"; do
+            warn "$path: subfolder skipped (use -r)"
+        done
+        return
+    fi
+
+    # With -r: a folder we cannot read (or enter) hides its files; count it (D-007).
+    mapfile -d '' -t paths < <(find -H "$dir" -mindepth 1 -type d \( ! -readable -o ! -executable \) -print0 2>/dev/null)
+    for path in "${paths[@]}"; do
+        not_done "$path: cannot read this folder (permission denied)"
+    done
+}
+
+# Remove the temp file/folder that was being written, and forget it.
+# Called on failure, and on exit (see the trap in main).
+cleanup() {
+    if [[ -n "$TMP_PATH" ]]; then
+        rm -rf -- "$TMP_PATH"
+    fi
+    TMP_PATH=""
+}
+
+usage() {
+    cat <<'EOF'
+Usage: extract [-h] [-r] [-v] file [file...]
+
+Unpack archives in place. The type is detected with the `file` command,
+so file names and extensions do not matter.
+
+Supported: gzip (gunzip), bzip2 (bunzip2), zip (unzip), compress (uncompress).
+
+Options:
+  -h    show this help and exit
+  -r    recursive: go into subfolders and into archives inside archives
+  -v    verbose: print each file decompressed, warn for each file that was not
+
+Output:     the number of archives decompressed
+Exit code:  the number of files NOT decompressed (capped at 255), 2 on usage error
+EOF
+}
+
+# Print an error and the usage to stderr, then exit 2 (incorrect usage).
+usage_error() {
+    echo "extract: $1" >&2
+    usage >&2
+    exit 2
+}
+
+# Print a warning to stderr, only with -v.
+warn() {
+    if (( verbose )); then
+        echo "extract: warning: $*" >&2
+    fi
+}
+
+# Read the options into the globals above.
+# The caller removes them afterwards with: shift $((OPTIND - 1))
+parse_args() {
+    local opt
+    OPTIND=1   # start from the first argument, even if called before
+
+    while getopts ":hrv" opt; do
+        case "$opt" in
+            h) usage; exit 0 ;;
+            r) recursive=1 ;;
+            v) verbose=1 ;;
+            *) usage_error "unknown option: -$OPTARG" ;;
+        esac
+    done
+}
+
+main() {
+    parse_args "$@"
+    shift $((OPTIND - 1))
+
+    if (( $# == 0 )); then
+        usage_error "no files given"
+    fi
+
+    if ! command -v file >/dev/null; then
+        echo "extract: the 'file' command is required but was not found" >&2
+        exit 2
+    fi
+
+    # Remove a leftover temp file when the script exits, also on Ctrl+C.
+    trap cleanup EXIT
+
+    local target
+    for target in "$@"; do
+        if [[ -d "$target" ]]; then
+            process_dir "$target"
+        else
+            process_file "$target" 1
+        fi
+    done
+
+    echo "$decompressed"
+
+    # Exit codes are 0-255; a bigger number would wrap around (256 -> 0). D-008.
+    if (( not_decompressed > 255 )); then
+        echo "extract: warning: $not_decompressed files were not decompressed (exit code capped at 255)" >&2
+        exit 255
+    fi
+    exit "$not_decompressed"
+}
+
+# Run only when the script is executed, not when it is sourced (for tests).
+# "set" is here so the strict mode does not leak into a shell that sources us.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    set -uo pipefail
+    main "$@"
+fi
