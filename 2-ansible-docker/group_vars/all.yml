@@ -1,0 +1,12 @@
+---
+# Where the app files are deployed on the target (no sudo needed, see D-013).
+app_dir: "{{ ansible_facts['env']['HOME'] }}/hello-counter"
+
+# Host port for the web page. It is bound to 127.0.0.1 only (D-010).
+web_port: 8080
+
+# Pinned Redis image tag (D-010).
+redis_image_tag: 8.10.3-alpine
+
+# Max seconds to wait for all containers to become healthy.
+compose_wait_timeout: 120
