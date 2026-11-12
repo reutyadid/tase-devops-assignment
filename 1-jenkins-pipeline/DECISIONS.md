@@ -177,6 +177,9 @@ Each significant decision gets one entry. Newest at the bottom.
     `checkout` step returns `GIT_COMMIT` / `GIT_BRANCH` / `GIT_URL`, which are passed to
     `prepareEnv(gitVars)` for the manual-run fallback. (The Jenkinsfile itself is always read
     from the head of `main`.)
+    Verified: two simulated webhooks sent back to back for older commits `3f147af` and `03e3d34`
+    gave two separate builds (#9, #10); each checked out and reported its own commit while `main`
+    was at `92a943a`. Manual build #11 checked out `main` and used the git values.
   - `GIT_BRANCH` comes from the checkout result (the workspace is on a detached HEAD, so
     `git rev-parse --abbrev-ref HEAD` would only print `HEAD`).
   - `prepareEnv` fails the build if `SCM_COMMIT` or `SCM_COMMITTER` is empty.
