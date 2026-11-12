@@ -1,0 +1,12 @@
+# Python packages for the Ansible control node (install into a venv, see README).
+# ansible-core is the only direct dependency. The other lines are its dependencies,
+# pinned to the tested versions (generated with `pip freeze`) so installs are repeatable.
+ansible-core==2.21.6
+cffi==2.1.1
+cryptography==50.0.2
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+packaging==26.3
+pycparser==3.12
+PyYAML==6.0.3
+resolvelib==1.2.1

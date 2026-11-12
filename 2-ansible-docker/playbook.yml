@@ -1,0 +1,93 @@
+---
+# Deploys the hello-counter Docker Compose app (web + counter + redis) and checks it works.
+# Run from this folder: ansible-playbook playbook.yml
+- name: Deploy the hello-counter app
+  hosts: app
+  gather_facts: true
+
+  tasks:
+    # Pre-flight (D-006): Docker is a prerequisite. We check it, we do not install it.
+    # `timeout`: when Docker Desktop is stopped, `docker info` in WSL can hang instead of
+    # failing. After docker_check_timeout seconds it is stopped (exit code 124);
+    # `-k 5` kills it 5s later if it ignores the stop signal.
+    - name: Check that the Docker daemon is reachable
+      ansible.builtin.command: "timeout -k 5 {{ docker_check_timeout }} docker info"
+      register: docker_info
+      changed_when: false
+      failed_when: false
+
+    - name: Stop with a clear message if Docker is not running
+      ansible.builtin.assert:
+        that: docker_info.rc == 0
+        fail_msg: >-
+          Docker is not reachable (docker info failed). Check that Docker Desktop (or the
+          Docker daemon) is running, that the docker CLI is installed and on PATH, and that
+          your user may use Docker (docker group). Exit code {{ docker_info.rc }}
+          (124 = no answer within {{ docker_check_timeout }}s). Error:
+          {{ docker_info.stderr | default(docker_info.msg, true) | default('', true) }}
+        quiet: true
+
+    - name: Create the app folders
+      ansible.builtin.file:
+        path: "{{ app_dir }}/{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - web
+        - counter
+
+    # Files are listed one by one, so local leftovers (for example __pycache__) are never copied.
+    - name: Copy the service source files
+      ansible.builtin.copy:
+        src: "app/{{ item.0 }}/{{ item.1 }}"
+        dest: "{{ app_dir }}/{{ item.0 }}/{{ item.1 }}"
+        mode: "0644"
+      loop: "{{ ['web', 'counter'] | product(['Dockerfile', 'app.py', 'requirements.txt']) | list }}"
+
+    - name: Render the Compose file
+      ansible.builtin.template:
+        src: compose.yaml.j2
+        dest: "{{ app_dir }}/compose.yaml"
+        mode: "0644"
+
+    # build: always uses the Docker build cache, so an unchanged app is not rebuilt (D-008).
+    # wait: true blocks until every container is healthy (healthchecks in the Compose file).
+    - name: Build and start the app with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_dir }}"
+        state: present
+        build: always
+        wait: true
+        wait_timeout: "{{ compose_wait_timeout }}"
+
+    # Self-check (N-3): the second request must show a higher count than the first.
+    # "Higher", not "exactly +1": someone else may open the page between the two requests.
+    # Note: this adds 2 hits on every run (D-008).
+    - name: Request the page (first time)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ web_port }}/"
+        return_content: true
+        use_proxy: false
+      register: first_page
+
+    - name: Request the page (second time)
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ web_port }}/"
+        return_content: true
+        use_proxy: false
+      register: second_page
+
+    - name: Read the hit count from both pages
+      ansible.builtin.set_fact:
+        # default(['-1']): if the text is missing, the assert below fails with a clear message.
+        first_count: "{{ first_page.content | regex_search('Page views: (\\d+)', '\\1') | default(['-1'], true) | first | int }}"
+        second_count: "{{ second_page.content | regex_search('Page views: (\\d+)', '\\1') | default(['-1'], true) | first | int }}"
+
+    - name: Check the page and the counter
+      ansible.builtin.assert:
+        that:
+          - "'Hello World' in second_page.content"
+          - first_count | int >= 0
+          - second_count | int > first_count | int
+        fail_msg: "Page or counter check failed (hit count {{ first_count }} -> {{ second_count }}, -1 = not found)."
+        success_msg: "OK: Hello World is served, hit count {{ first_count }} -> {{ second_count }}."
