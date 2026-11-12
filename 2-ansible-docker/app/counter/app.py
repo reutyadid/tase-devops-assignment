@@ -8,12 +8,12 @@ from flask import Flask
 app = Flask(__name__)
 
 # The Redis host comes from the environment; the default is the Compose service name.
-# Timeouts are 1s so the whole call stays under web's 2s timeout.
+# Timeouts are 0.5s each, so connect + INCR together stay under web's 2s timeout.
 # retry=None: no automatic retries. A retried INCR could count one hit twice.
 db = redis.Redis(
     host=os.environ.get("REDIS_HOST", "redis"),
-    socket_timeout=1,
-    socket_connect_timeout=1,
+    socket_timeout=0.5,
+    socket_connect_timeout=0.5,
     retry=None,
 )
 

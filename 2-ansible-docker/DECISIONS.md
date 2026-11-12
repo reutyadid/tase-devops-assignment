@@ -53,7 +53,8 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Trade-offs:** No reverse proxy. Production note in the README: put Nginx in front.
   - No exactly-once counting: if `web` times out after 2s while `counter` still finishes
     `INCR`, the user sees 503 but the hit is counted. Exactly-once needs idempotency keys,
-    which is out of scope. `counter` keeps its own Redis timeouts at 1s and disables
+    which is out of scope. `counter` keeps its own Redis timeouts at 0.5s each (connect + read
+    stay under 2s) and disables
     redis-py's automatic retries (default: 10 retries) to make this rare and to avoid
     counting one hit twice.
   - Flask answers `HEAD` on every `GET` route, so `HEAD /` also adds a hit. Nothing in this
@@ -82,6 +83,10 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Trade-offs:** Each service has its own fully pinned `requirements.txt` (separate build
   contexts), so the shared Flask/gunicorn pins appear in both files. An upgrade must update
   both.
+  - The two Dockerfiles are identical, and the `web` and `counter` healthchecks in the
+    Compose template are the same block. This duplication is on purpose: one shared
+    Dockerfile or a YAML anchor would remove it, but adds a mechanism to explain for two
+    small services.
 - **Sources:**
   - https://flask.palletsprojects.com/en/stable/deploying/
   - https://flask.palletsprojects.com/en/stable/deploying/gunicorn/
@@ -208,11 +213,14 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Why:** Smallest structure that still deploys properly. `build: always` is needed because
   the default `build: policy` only builds when the image is missing, so code changes would not
   be deployed. With an unchanged build context Docker's build cache returns the same image, the
-  containers are not recreated, and the run should report `changed=0` (to be confirmed in
-  testing; result goes to TROUBLESHOOTING.md if not).
+  containers are not recreated, and the run reports `changed=0` (confirmed: second run
+  `changed=0`). This relies on the module option `ignore_build_events` (default `true`),
+  so a cached build alone is not reported as a change.
   Without `wait`, `docker compose up` returns when the containers have started, not when
   gunicorn listens, so the first self-check could get "Connection refused".
-- **Trade-offs:** Not reusable as a role. The self-check sends 2 real page requests, so every
+- **Trade-offs:** Not reusable as a role. The self-check asserts that the second count is
+  higher than the first (not exactly +1), so a visitor refreshing the page during the run
+  does not fail a healthy deployment. The self-check sends 2 real page requests, so every
   run adds 2 hits to the counter, while Ansible still reports `changed=0` (`uri` does not
   report changes). This is intended: it tests the real path. A read-only endpoint would avoid
   it, but it is a feature the task does not need.
