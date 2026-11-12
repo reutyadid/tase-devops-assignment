@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+# SSH keys and other local secret files
+secrets/
 *.retry
 __pycache__/
 *.pyc

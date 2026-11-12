@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # One-time Nexus setup (D-011, D-012). Safe to run again: every step checks first.
+# It also validates the Jenkins values in .env, so mistakes show up before Jenkins starts.
 #   0. Validate .env; stop unless NEXUS_ACCEPT_EULA=true (the EULA is the user's decision)
 #   1. Wait until Nexus accepts writes
 #   2. Replace the random initial admin password with NEXUS_ADMIN_PASSWORD
@@ -25,18 +26,22 @@ set -a                             # export every variable defined in .env
 source ./.env
 set +a
 
-for var in NEXUS_ACCEPT_EULA NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_USER NEXUS_DEPLOY_PASSWORD; do
+for var in NEXUS_ACCEPT_EULA NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_USER NEXUS_DEPLOY_PASSWORD \
+           JENKINS_ADMIN_PASSWORD GIT_REPO_URL JENKINS_AGENT_SSH_PUBKEY; do
   [[ -n "${!var:-}" ]] || die "$var is not set in .env"
 done
 # Passwords: letters, digits and . _ - only, at least 12 characters. Other characters
 # ($, quotes, backslash, ...) are read differently by bash, Docker Compose, JSON and curl.
 # Generate one with: openssl rand -hex 16
-for var in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD; do
+for var in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD JENKINS_ADMIN_PASSWORD; do
   [[ "${!var}" != "change-me" ]] || die "$var is still 'change-me' in .env"
   [[ "${!var}" =~ ^[a-zA-Z0-9._-]{12,}$ ]] \
     || die "$var must be at least 12 characters: letters, digits, . _ - only"
 done
 [[ "$NEXUS_DEPLOY_USER" =~ ^[a-zA-Z0-9._-]+$ ]] || die "NEXUS_DEPLOY_USER has invalid characters"
+[[ "$GIT_REPO_URL" == https://* && "$GIT_REPO_URL" != *YOUR-USER* ]] \
+  || die "GIT_REPO_URL must be the https URL of your GitHub repository"
+[[ -r secrets/agent_key ]] || die "secrets/agent_key not found. See the SSH key steps in .env.example"
 
 # The EULA is a legal agreement: never accept it on the user's behalf.
 if [[ "$NEXUS_ACCEPT_EULA" != "true" ]]; then

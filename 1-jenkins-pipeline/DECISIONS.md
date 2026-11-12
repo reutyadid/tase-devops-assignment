@@ -188,8 +188,8 @@ Each significant decision gets one entry. Newest at the bottom.
      (Controller Isolation). Separate file system, no access to `JENKINS_HOME`.
   3. Dynamic agents (Docker Cloud plugin) — clean container per build, but the controller needs
      the Docker socket, which is root-equivalent on the host. Too complex for this task.
-- **Decision:** Option 2. One agent container based on the official `jenkins/ssh-agent:jdk21`
-  image (JDK 21 included, no custom Dockerfile). Controller: `numExecutors: 0` in JCasC.
+- **Decision:** Option 2. One agent container based on the official `jenkins/ssh-agent:9.3.2-jdk21`
+  image (JDK 21 + sshd, no custom Dockerfile; `mem_limit: 1g`, no published port). Controller: `numExecutors: 0` in JCasC.
 - **Why:** Follows the official Jenkins security guidance at the cost of one small container.
 - **Trade-offs:** ~0.5–1 GB extra memory; one more connection to configure (see D-006).
 - **Sources:**
@@ -215,6 +215,12 @@ Each significant decision gets one entry. Newest at the bottom.
   agent (agent connects to controller) is also a common, valid approach — it is the standard for
   dynamic agents such as Kubernetes pods — but its secret is created by the controller only after
   it starts, so a static Compose setup needs an extra step to fetch it.
+- **Private key file mode 644:** Compose secrets without Swarm are bind mounts that keep the
+  host owner and mode. The jenkins user in the container is uid 1000; with mode 600 only the
+  host user who created the file could read it, so it works only when that uid is also 1000.
+  644 makes it readable on any host. Accepted: the key opens only the agent container, which has
+  no published port, and the file stays on the reviewer's machine in a git-ignored folder.
+  In production: a secrets manager, or Swarm/Kubernetes secrets with an explicit owner.
 - **Host key verification:** `nonVerifyingKeyVerificationStrategy`.
   - Why: the official `jenkins/ssh-agent` image deletes its host keys at build time and creates
     new ones (`ssh-keygen -A`) every time the container starts, so the agent's host key changes on
@@ -265,7 +271,21 @@ Each significant decision gets one entry. Newest at the bottom.
   prerequisite for the reviewer; it does not replace JCasC for configuring Jenkins. Its place in
   production (host provisioning) is noted in the README.
 - **Security:** Secrets (admin password, SSH key, Nexus deploy password) are read from Docker
-  secret files with `${readFile:...}`, not from environment variables.
+  secret files with `${readFile:...}`, not from environment variables. Compose creates them from
+  `.env` (`secrets: ... environment:`) and from `secrets/agent_key` (git-ignored). Verified: no
+  secret value in `docker inspect` or in the Jenkins log.
+- **Implemented (chunk C6-C8):**
+  - Image `jenkins/jenkins:2.580.2-lts-jdk21` (LTS, Java 21). `plugins.txt` pins 8 direct plugins
+    and all 60 dependencies; the list was generated once with `jenkins-plugin-cli` on that image.
+  - `casc.yaml` is copied into the image (outside the `jenkins-home` volume), so a rebuilt image
+    always applies the config from git.
+  - Login required for everything (`loggedInUsersCanDoAnything`, `allowAnonymousRead: false`);
+    anonymous API call returns 403.
+  - Non-secret values (`NEXUS_DEPLOY_USER`, `GIT_REPO_URL`) come from `.env` as environment
+    variables; Compose stops with an error if one is missing (`${VAR:?}`).
+  - The library SCM is written as `gitSource:`, the name the JCasC export uses
+    (`/configuration-as-code/export`), together with `libraryPath`.
+  - Memory: controller `-Xmx512m` in a 1 GB container; measured ~0.5 GB after start.
 - **Trade-offs:** Two DSLs to learn (JCasC YAML + Job DSL Groovy).
 - **Sources:**
   - https://plugins.jenkins.io/configuration-as-code/

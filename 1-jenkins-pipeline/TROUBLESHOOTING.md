@@ -86,3 +86,23 @@ Real problems I hit while building this, and how I solved them.
 - **How to verify:** upload a new file to `maven-releases` as the deploy user → `201`; the same
   file again → `409` (release repository: no redeploy); upload to `maven-snapshots` → `403`.
 - **Lesson:** start from the smallest privilege set and test it with the real action.
+
+---
+
+## T-005: `source .env` fails on the SSH public key
+
+- **Symptom:** after adding the agent public key to `.env`, reading the file with bash failed:
+  ```
+  .env: line 15: AAAAC3NzaC1lZDI1NTE5...: No such file or directory
+  ```
+  `nexus/setup.sh` reads `.env` the same way, so it would fail too.
+- **Root cause:** the key has spaces (`ssh-ed25519 AAAA... jenkins-agent`). Unquoted, bash reads
+  `JENKINS_AGENT_SSH_PUBKEY=ssh-ed25519` as a variable for the next word, and runs the next word
+  as a command. Docker Compose reads the same line fine, so `docker compose up` worked.
+- **Fix:** keep the value in double quotes. Both bash and Compose remove the quotes:
+  ```
+  JENKINS_AGENT_SSH_PUBKEY="ssh-ed25519 AAAA... jenkins-agent"
+  ```
+  The command in `.env.example` writes it with quotes.
+- **How to verify:** `bash -c 'set -a; source .env; echo ok'` prints `ok`.
+- **Lesson:** a `.env` file read by two tools must use syntax both understand.

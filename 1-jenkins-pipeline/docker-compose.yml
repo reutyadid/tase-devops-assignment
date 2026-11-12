@@ -25,5 +25,55 @@ services:
       # First start creates the database: measured ~4 minutes, so leave a margin.
       start_period: 300s
 
+  # Jenkins controller: UI, config and job orchestration; runs no builds (D-005, D-007).
+  jenkins:
+    build: ./jenkins
+    image: tase-jenkins-controller:local
+    environment:
+      # Heap 512 MB inside a 1 GB container; JCasC replaces the setup wizard.
+      JAVA_OPTS: -Xmx512m -Djenkins.install.runSetupWizard=false
+      # Non-secret values used by casc.yaml as ${VAR}.
+      NEXUS_DEPLOY_USER: ${NEXUS_DEPLOY_USER:?set in .env}
+      GIT_REPO_URL: ${GIT_REPO_URL:?set in .env}
+    # Start the agent too, so the controller's SSH retries find it.
+    depends_on:
+      - agent
+    secrets:
+      - jenkins_admin_password
+      - nexus_deploy_password
+      - agent_ssh_key
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  # Build agent: Java 21 + sshd only. Reached by the controller over SSH inside
+  # the Compose network; no port is published (D-005, D-006).
+  agent:
+    image: jenkins/ssh-agent:9.3.2-jdk21
+    environment:
+      JENKINS_AGENT_SSH_PUBKEY: ${JENKINS_AGENT_SSH_PUBKEY:?set in .env}
+    mem_limit: 1g
+
+# Docker secrets: mounted as files in /run/secrets/ and read by casc.yaml.
+# Not visible in `docker inspect`, unlike environment variables.
+secrets:
+  jenkins_admin_password:
+    environment: JENKINS_ADMIN_PASSWORD
+  nexus_deploy_password:
+    environment: NEXUS_DEPLOY_PASSWORD
+  agent_ssh_key:
+    # A bind mount keeps the host owner and mode: the file must be readable by uid 1000
+    # (jenkins in the container), so it is chmod 644 (D-006).
+    file: ./secrets/agent_key
+
 volumes:
   nexus-data:
+  jenkins-home:

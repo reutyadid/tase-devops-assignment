@@ -1,0 +1,73 @@
+# Jenkins Configuration as Code (D-007). Applied on every start of the controller.
+# Secrets are never written here: ${readFile:...} reads Docker secrets mounted in /run/secrets,
+# ${VAR} reads non-secret environment variables set in docker-compose.yml.
+jenkins:
+  systemMessage: "TASE DevOps assignment - configured by JCasC"
+  # Builds never run on the controller (D-005).
+  numExecutors: 0
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${readFile:/run/secrets/jenkins_admin_password}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  nodes:
+    - permanent:
+        name: agent-1
+        labelString: maven
+        remoteFS: /home/jenkins/agent
+        numExecutors: 1
+        launcher:
+          ssh:
+            host: agent                 # Compose service name
+            port: 22
+            credentialsId: agent-ssh-key
+            javaPath: /opt/java/openjdk/bin/java
+            launchTimeoutSeconds: 60
+            maxNumRetries: 10
+            retryWaitTime: 15
+            # The agent image creates new host keys on every start (D-006).
+            sshHostKeyVerificationStrategy: nonVerifyingKeyVerificationStrategy
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # Controller -> agent SSH login. SYSTEM scope: not usable inside jobs.
+          - basicSSHUserPrivateKey:
+              scope: SYSTEM
+              id: agent-ssh-key
+              username: jenkins
+              description: SSH key for agent-1
+              privateKeySource:
+                directEntry:
+                  privateKey: "${readFile:/run/secrets/agent_ssh_key}"
+          # Nexus deploy user (D-011), used only by withCredentials in the Upload stage.
+          - usernamePassword:
+              scope: GLOBAL
+              id: nexus-deploy
+              username: "${NEXUS_DEPLOY_USER}"
+              password: "${readFile:/run/secrets/nexus_deploy_password}"
+              description: Nexus deploy user (maven-releases only)
+
+unclassified:
+  location:
+    url: http://localhost:8080/
+  # Shared library from the same repo, subfolder (D-001).
+  globalLibraries:
+    libraries:
+      - name: tase-shared-lib
+        defaultVersion: main
+        implicit: false
+        allowVersionOverride: false
+        retriever:
+          modernSCM:
+            libraryPath: 1-jenkins-pipeline/shared-library/
+            scm:
+              gitSource:
+                remote: "${GIT_REPO_URL}"
