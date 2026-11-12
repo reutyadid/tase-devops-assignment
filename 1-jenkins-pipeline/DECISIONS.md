@@ -117,8 +117,10 @@ Each significant decision gets one entry. Newest at the bottom.
   - The smee channel URL acts like a password: anyone who knows it can read the webhooks and post
     a fake payload, and smee-client forwards it with the token. A fake payload can name any real
     commit of `main` (it passes the filter) and any committer / pusher name, so the build would
-    deploy a jar with false `SCM-*` values. The URL is kept in `.env`, never committed. The token
-    also appears in the smee client's own log line ("Forwarding ... ?token=...") on this machine.
+    deploy a jar with false `SCM-*` values. The URL is kept in `.env`, never committed. smee-client
+    gets the URL and the token as arguments (visible in `docker top`) and prints both in its log
+    line ("Forwarding <url> to ...?token=..."), so anyone with Docker access on this machine can
+    read them.
   - smee.io is for development only. In production: a real inbound endpoint (reverse proxy /
     TLS) and HMAC verification of `X-Hub-Signature-256`, so a payload that GitHub did not sign
     is rejected.

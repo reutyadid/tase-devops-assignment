@@ -113,7 +113,7 @@ Jenkins: <http://localhost:8080>, user `admin`, password = `JENKINS_ADMIN_PASSWO
 | `prepareEnv` (R-7, R-8) | Console Output, Prepare stage | `prepareEnv - source: webhook` and 7 `SCM_*` values, e.g. `SCM_PUSHER=<your GitHub user>` |
 | Build description (R-8) | Job page, build history | `<short sha> by <committer>` |
 | Build + tests (R-3) | Console Output, Build stage | `Tests run: 1, Failures: 0` |
-| Upload (R-5) | Console Output, Upload stage | `Uploaded to nexus-releases: ... hello-app-1.0.<build>.jar`; `Finished: SUCCESS` |
+| Upload (R-5) | Console Output, Upload stage | `Uploaded to nexus-releases: ... hello-app-1.0.<build>.jar`; `Finished: SUCCESS`. The next line, `Skipping already-deployed ...`, is only information: the deploy plugin (3.2.0) notes that this project was already uploaded in this run; nothing is skipped |
 | Artifact in Nexus (R-5) | <http://localhost:8081> → Browse → `maven-releases` → `com/example/hello-app` (log in as `admin`, password `NEXUS_ADMIN_PASSWORD`) | Version `1.0.<build>`, uploader `jenkins-deploy` |
 
 SCM values inside the uploaded jar (replace `<build>`):
@@ -130,7 +130,7 @@ B=2   # the build number to check
 A manual **Build Now** also works: `prepareEnv` then reads the values from git and sets
 `SCM_PUSHER=manual`.
 
-Screenshots of a real run: [build history](docs/screenshots/01-build-history.png),
+Screenshots of the clean run (webhook build #2): [build history](docs/screenshots/01-build-history.png),
 [build cause](docs/screenshots/02-build-cause.png),
 [prepareEnv log](docs/screenshots/03-prepareenv-log.png),
 [upload log](docs/screenshots/04-upload-log.png),

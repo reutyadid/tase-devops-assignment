@@ -39,8 +39,9 @@ for var in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD JENKINS_ADMIN_PASSWORD GWT
     || die "$var must be at least 12 characters: letters, digits, . _ - only"
 done
 [[ "$NEXUS_DEPLOY_USER" =~ ^[a-zA-Z0-9._-]+$ ]] || die "NEXUS_DEPLOY_USER has invalid characters"
-[[ "$GIT_REPO_URL" == https://* && "$GIT_REPO_URL" != *YOUR-USER* ]] \
-  || die "GIT_REPO_URL must be the https URL of your GitHub repository"
+[[ "$GIT_REPO_URL" =~ ^https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+\.git$ \
+   && "$GIT_REPO_URL" != *YOUR-USER* ]] \
+  || die "GIT_REPO_URL must be the https URL of your GitHub repository (https://github.com/<user>/<repo>.git)"
 [[ "$SMEE_URL" =~ ^https://smee\.io/[A-Za-z0-9]+$ && "$SMEE_URL" != *CHANGE-ME* ]] \
   || die "SMEE_URL must be your channel URL from https://smee.io"
 [[ -r secrets/agent_key ]] || die "secrets/agent_key not found. See the SSH key steps in .env.example"
