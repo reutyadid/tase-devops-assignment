@@ -14,8 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py .
 
 # Run as an unprivileged system user created for this app.
-RUN useradd --system --no-create-home --shell /usr/sbin/nologin app
-USER app
+RUN groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+# Numeric UID: tools can check "not root" without looking up the name (hadolint DL3066).
+USER 10001:10001
 
 EXPOSE 8000
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--access-logfile", "-", "app:app"]

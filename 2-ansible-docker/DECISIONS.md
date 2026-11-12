@@ -166,6 +166,8 @@ Each significant decision gets one entry. Newest at the bottom.
   `docker info` and fails with a clear message (for example "Docker Desktop is not running or
   WSL integration is off"). The Compose version is not checked by us: the
   `docker_compose_v2` module already fails if Compose is older than 2.18.
+  The check runs as `timeout 20 docker info`: in testing, with Docker Desktop stopped,
+  `docker info` in WSL hung instead of failing, so the playbook never reached the message.
 - **Why:** Safe for the reviewer's machine; no root needed.
 - **Trade-offs:** Not a full "bare server" setup. Production note: a separate role installs
   Docker on real servers.
@@ -304,8 +306,16 @@ Each significant decision gets one entry. Newest at the bottom.
   4. The full `ansible` package — hundreds of collections; the `community.docker` version is
      chosen by the package, not by us.
 - **Decision:** Option 1. `ansible-core==2.21.6` (the latest 2.22 needs Python >= 3.13).
-  Lint tools (`ansible-lint`, `yamllint`) go in `requirements-dev.txt` because the reviewer
-  does not need them to run the playbook. `.venv/` is git-ignored.
+  The lint tool goes in `requirements-dev.txt` because the reviewer does not need it to run
+  the playbook. `.venv/` is git-ignored.
+- **Linters:**
+  - `ansible-lint==26.11.0` (passes the `production` profile). It already runs the
+    `yamllint` rules with Ansible-friendly settings, so `yamllint` is not run on its own
+    (run alone with defaults it flags 80-char lines and scans `.venv/`).
+  - `hadolint` runs from its pinned image `hadolint/hadolint:v2.15.1`, so nothing extra is
+    installed. Its rule DL3066 led to a numeric user and group in the Dockerfiles
+    (`USER 10001:10001`): platforms such as Kubernetes can verify "not root" only for a
+    numeric UID. The GID is fixed too, otherwise `useradd --system` picks one (999).
 - **Pinning level:** The full environment is pinned, not only direct dependencies.
   1. Direct only (`ansible-core==2.21.6`) — the right style for a library, but a later install
      can pull newer, untested versions of Jinja2, cryptography, etc.
@@ -328,6 +338,8 @@ Each significant decision gets one entry. Newest at the bottom.
   - https://pypi.org/project/ansible-core/
   - https://pip.pypa.io/en/stable/topics/repeatable-installs/
   - https://packaging.python.org/en/latest/discussions/install-requires-vs-requirements/
+  - https://ansible.readthedocs.io/projects/lint/
+  - https://github.com/hadolint/hadolint
 
 ---
 

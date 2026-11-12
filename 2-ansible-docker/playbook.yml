@@ -7,8 +7,10 @@
 
   tasks:
     # Pre-flight (D-006): Docker is a prerequisite. We check it, we do not install it.
+    # `timeout 20`: when Docker Desktop is stopped, `docker info` in WSL can hang instead of
+    # failing. After 20s it is stopped with exit code 124.
     - name: Check that the Docker daemon is reachable
-      ansible.builtin.command: docker info
+      ansible.builtin.command: timeout 20 docker info
       register: docker_info
       changed_when: false
       failed_when: false
@@ -19,7 +21,8 @@
         fail_msg: >-
           Docker is not reachable (docker info failed). Check that Docker Desktop (or the
           Docker daemon) is running, that the docker CLI is installed and on PATH, and that
-          your user may use Docker (docker group). Error:
+          your user may use Docker (docker group). Exit code {{ docker_info.rc }}
+          (124 = no answer within 20s). Error:
           {{ docker_info.stderr | default(docker_info.msg, true) | default('', true) }}
         quiet: true
 
