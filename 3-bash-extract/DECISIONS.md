@@ -42,8 +42,20 @@ Each significant decision gets one entry. Newest at the bottom.
      extra copies, cleanup, possible name clashes.
   3. `gunzip -S ''` — a documented bug in some versions, and bunzip2 has no such flag.
 - **Decision:** Option 1, with two kinds of tools in two tables:
-  - `STREAM_TOOLS` (one file in → one file out): gunzip, bunzip2, uncompress — run with
-    `-c` into a temp file (`mktemp`) in the **same folder**, then `mv -f` to the final name.
+  - `STREAM_TOOLS` (one file in → one file out): gunzip, bunzip2, uncompress — run as
+    `"$tool" -c < "$file"` into a temp file (`mktemp`) in the **same folder**, then
+    `mv -f` to the final name. The file is given on **stdin**, so the tool sees only the
+    content and never the name (no suffix checks, no names that look like options).
+    Verified for all three tools, also through a symlink.
+  - Any non-zero exit code of the tool is a failure (gzip returns 2 also for warnings,
+    e.g. "trailing garbage ignored"): the temp file is removed and nothing is overwritten.
+    The error text of the tool (and of `mktemp` / `chmod` / `mv`) is hidden. Our warning
+    (with `-v`) names the file and the step that failed (e.g. "'gunzip' failed",
+    "cannot create a temp file"), not the tool's exact reason.
+  - `2>/dev/null` is written **before** `< "$file"`: redirections run left to right, so an
+    error while opening the file is hidden too.
+  - `mv -fT`: `-T` never moves the file *into* a folder, even if a folder with the output
+    name appears after our `-d` check.
   - `ARCHIVE_TOOLS` (one file in → many files out): unzip — extract into a temp dir
     (`mktemp -d`) in the same folder, then `cp -af "$tmpdir/." "$dir/"` only on success.
   - A `trap ... EXIT` removes leftover temp files/dirs if the script stops (e.g. Ctrl+C).
@@ -57,6 +69,9 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Why:** `>` empties the target before the tool runs, so a corrupt archive would destroy
   an existing good file. Writing to a temp file and renaming only on success prevents this.
   `mv` inside the same folder is a rename, so it is atomic.
+- **Known limitation:** if Ctrl+C arrives right after `mktemp` created the temp file but
+  before its name is saved in `TMP_PATH`, an empty hidden `.extract.XXXXXX` file is left.
+  The window is tiny; closing it would need a much more complex design.
 - **Trade-offs:** For zip, `cp` is not atomic and the temp dir needs extra disk space
   for a moment. `cp` is used instead of `mv` because `mv` cannot merge into an existing
   folder. A few more lines of code.
@@ -102,7 +117,8 @@ Each significant decision gets one entry. Newest at the bottom.
     is processed. The assignment asks for this: "If files with the same name already
     exist, they are overwritten".
   - A name with a newline right before the suffix (`$'rep\n.gz'`) gives a wrong output
-    name (`rep`), because `$(...)` removes trailing newlines. Such names are very rare;
+    name (`rep`), because `$(...)` removes trailing newlines (the same applies to
+    `$(dirname ...)`). An existing file `rep` would be overwritten. Such names are very rare;
     we accept this instead of making the function harder to read.
 - **Sources:** [bzip2(1) — `.out` convention](https://manpages.ubuntu.com/manpages/noble/man1/bzip2.1.html)
 

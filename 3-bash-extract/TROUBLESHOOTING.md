@@ -4,7 +4,7 @@ Real problems I hit while building this, and how I solved them.
 
 ---
 
-## T-002: bats test fails with `mktemp: command not found`
+## T-001: bats test fails with `mktemp: command not found`
 
 - **Symptom:** The test for a missing `file` command failed:
   ```
@@ -22,7 +22,7 @@ Real problems I hit while building this, and how I solved them.
 
 ---
 
-## T-003: ShellCheck warnings that are false alarms (SC2034, SC2154, SC1091)
+## T-002: ShellCheck warnings that are false alarms (SC2034, SC2154, SC1091)
 
 - **Symptom:**
   ```
@@ -49,7 +49,7 @@ Real problems I hit while building this, and how I solved them.
 
 ---
 
-## T-004: `compress` fails in the test fixtures with exit code 2
+## T-003: `compress` fails in the test fixtures with exit code 2
 
 - **Symptom:** All tests that create fixtures failed:
   ```
@@ -65,7 +65,7 @@ Real problems I hit while building this, and how I solved them.
 
 ---
 
-## T-005: Associative arrays disappear when the script is sourced from a function
+## T-004: Associative arrays disappear when the script is sourced from a function
 
 - **Symptom (found before it broke a test):** loading the script through a helper
   function (`load_extract`) would leave `STREAM_TOOLS` / `ARCHIVE_TOOLS` empty:

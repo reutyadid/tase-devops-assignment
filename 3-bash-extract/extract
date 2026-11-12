@@ -6,6 +6,10 @@
 verbose=0
 recursive=0
 
+# The temp file/folder being written right now ("" = none). cleanup() removes it
+# if the script stops in the middle (error, Ctrl+C).
+TMP_PATH=""
+
 # --- Supported types: mime type (from `file`) -> how to unpack -------------------
 # To add a method, add one line to one of these tables, and add the type to the
 # "Supported:" line in usage() (that list is written by hand, see D-002).
@@ -14,7 +18,7 @@ recursive=0
 # stay global even when this file is sourced from inside a function (tests).
 
 # Stream tools: one file in -> one file out. Value = a tool that supports -c (stdout).
-# TEMPORARY: used from chunk 4 on. Remove this line then.
+# TEMPORARY: read from chunk 6 on (process_target). Remove this line then.
 # shellcheck disable=SC2034
 declare -gA STREAM_TOOLS=(
     [application/gzip]="gunzip"
@@ -68,6 +72,64 @@ output_name() {
     fi
 }
 
+# Unpack one file with a stream tool, next to the file (D-002, D-003, D-005).
+# $1 = file, $2 = tool (from STREAM_TOOLS). Returns 0 on success, 1 on failure.
+unpack_stream() {
+    local file="$1"
+    local tool="$2"
+    local dir out
+    dir=$(dirname -- "$file")
+    out=$(output_name "$file")
+
+    if ! command -v "$tool" >/dev/null; then
+        warn "$file: '$tool' is not installed"
+        return 1
+    fi
+    if [[ -d "$out" ]]; then
+        warn "$file: '$out' is a folder, cannot overwrite it"
+        return 1
+    fi
+
+    # The error text of the commands below is hidden (2>/dev/null);
+    # warn() prints our own message instead, only with -v.
+
+    # An empty temp file in the same folder, so the final mv is a rename.
+    if ! TMP_PATH=$(mktemp -- "$dir/.extract.XXXXXX" 2>/dev/null); then
+        warn "$file: cannot create a temp file in '$dir'"
+        TMP_PATH=""
+        return 1
+    fi
+
+    # "< file": the tool reads only the content and never sees the name.
+    # 2>/dev/null comes first: redirections run left to right, so an error while
+    # opening "$file" is hidden too.
+    # Any non-zero exit code is a failure (gzip uses 2 for warnings, too).
+    if ! "$tool" -c 2>/dev/null < "$file" > "$TMP_PATH"; then
+        warn "$file: '$tool' failed"
+        cleanup
+        return 1
+    fi
+
+    # mktemp creates rw------- files; give the output the archive's permissions.
+    # mv -T: never move into a folder, even if one appeared after the check above.
+    if ! chmod --reference="$file" -- "$TMP_PATH" 2>/dev/null ||
+       ! mv -fT -- "$TMP_PATH" "$out" 2>/dev/null; then
+        warn "$file: could not write '$out'"
+        cleanup
+        return 1
+    fi
+    TMP_PATH=""   # renamed: nothing left to clean up
+}
+
+# Remove the temp file/folder that was being written, and forget it.
+# Called on failure, and on exit (see the trap in main).
+cleanup() {
+    if [[ -n "$TMP_PATH" ]]; then
+        rm -rf -- "$TMP_PATH"
+    fi
+    TMP_PATH=""
+}
+
 usage() {
     cat <<'EOF'
 Usage: extract [-h] [-r] [-v] file [file...]
@@ -94,13 +156,20 @@ usage_error() {
     exit 2
 }
 
+# Print a warning to stderr, only with -v.
+warn() {
+    if (( verbose )); then
+        echo "extract: warning: $*" >&2
+    fi
+}
+
 # Read the options into the globals above.
 # The caller removes them afterwards with: shift $((OPTIND - 1))
 parse_args() {
     local opt
     OPTIND=1   # start from the first argument, even if called before
 
-    # TEMPORARY: verbose/recursive are read from chunk 6 on. Remove this line then.
+    # TEMPORARY: recursive is read from chunk 7 on. Remove this line then.
     # shellcheck disable=SC2034
     while getopts ":hrv" opt; do
         case "$opt" in
@@ -124,6 +193,9 @@ main() {
         echo "extract: the 'file' command is required but was not found" >&2
         exit 2
     fi
+
+    # Remove a leftover temp file when the script exits, also on Ctrl+C.
+    trap cleanup EXIT
 
     # Processing the files is added in the next chunks.
 }
