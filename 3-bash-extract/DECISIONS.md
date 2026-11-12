@@ -16,8 +16,9 @@ Each significant decision gets one entry. Newest at the bottom.
      can change between versions, partial matches can be wrong.
   3. Read the magic bytes ourselves (`head`, `xxd`) — rejected: the assignment requires
      parsing the output of `file`.
-- **Decision:** `file -b --mime-type -- "$path"`. The old name `application/x-gzip` is an
+- **Decision:** `file -L -b --mime-type -- "$path"`. The old name `application/x-gzip` is an
   extra table entry pointing to the same tool. `--` protects names that start with `-`.
+  `-L` follows a symlink given on the command line (D-006).
 - **Why:** The mime type is an exact table key, so adding a method stays one line (R8).
 - **Trade-offs:** Zip-based formats with their own mime type (e.g. `.docx`) are not
   unzipped. We consider this the expected behavior.
@@ -49,7 +50,8 @@ Each significant decision gets one entry. Newest at the bottom.
     The temp variable is reset after each successful `mv`.
   - Temp dirs are removed with `rm -rf -- "${tmpdir:?}"` (fails if the variable is empty).
   - Adding a method = one table line + the type name in the `Supported:` line of
-    `usage()`. That help line is written by hand (not generated from the tables),
+    `usage()`. Optional: add its suffix to `output_name` (D-003); without it the method
+    still works, and the output is named `<name>.out`. That help line is written by hand (not generated from the tables),
     because the key order of an associative array is not fixed and a readable,
     stable help text is worth one extra edit.
 - **Why:** `>` empties the target before the tool runs, so a corrupt archive would destroy
@@ -78,9 +80,30 @@ Each significant decision gets one entry. Newest at the bottom.
   4. Always add `.out` — simplest, but `data.gz` → `data.gz.out` is surprising.
 - **Decision:** Option 1. `data.gz` → `data`, `report.txt` → `report.txt.out`.
   An existing file with that name is overwritten (e.g. on a second run).
-- **Why:** Predictable, matches what the tools themselves do, never overwrites the archive.
+  Details (function `output_name`):
+  - Any of the three suffixes is removed, whatever the real type is (a bzip2 file named
+    `data.gz` → `data`). The suffix only chooses the name; `file` chooses the tool.
+  - Case-sensitive: `data.GZ` → `data.GZ.out` (gunzip does not know `.GZ` either).
+  - Only the last suffix: `a.tar.gz` → `a.tar`.
+  - If no real file name is left (`.gz`, `dir/.gz`, `..gz` → `.`, `...gz` → `..`),
+    `.out` is added instead: `.gz.out`, `..gz.out`. Otherwise the output would be a folder.
+  - If the output name is an existing **folder** (`logs.gz` next to a folder `logs/`),
+    the archive counts as NOT decompressed with a warning, like the zip case in D-005.
+    Without this check `mv` would move the file *into* the folder. Implemented in chunk 4.
+- **Why:** Predictable; uses the same idea as the tools (remove the suffix, or add `.out`
+  like bunzip2), but only for the three main suffixes. The tools know more
+  (e.g. gunzip: `.tgz` → `.tar`, `.z`, `-gz`; bunzip2: `.tbz2`, `.bz`); we keep the list
+  short on purpose. The archive itself is never the output name.
 - **Trade-offs:** The `.out` suffix is a bit ugly. Zip is not affected (names come from
   inside the archive).
+- **Known limitations:**
+  - The output name can be the name of **another** archive in the same folder
+    (`report.gz` and a gzip file called `report`). That archive is overwritten before it
+    is processed. The assignment asks for this: "If files with the same name already
+    exist, they are overwritten".
+  - A name with a newline right before the suffix (`$'rep\n.gz'`) gives a wrong output
+    name (`rep`), because `$(...)` removes trailing newlines. Such names are very rare;
+    we accept this instead of making the function harder to read.
 - **Sources:** [bzip2(1) — `.out` convention](https://manpages.ubuntu.com/manpages/noble/man1/bzip2.1.html)
 
 ---

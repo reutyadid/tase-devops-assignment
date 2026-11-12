@@ -4,23 +4,6 @@ Real problems I hit while building this, and how I solved them.
 
 ---
 
-## T-001: `sudo apt-get install` fails when run from inside Claude Code
-
-- **Symptom:**
-  ```
-  sudo: a terminal is required to read the password; either use the -S option to read from standard input or configure an askpass helper
-  sudo: a password is required
-  ```
-- **Root cause:** The command ran without a real terminal, so `sudo` had nowhere to ask
-  for the password.
-- **Fix:** Ran the install command in a normal WSL terminal window. Did not use `sudo -S`
-  (it would expose the password in shell history / logs).
-- **How to verify:** `command -v file gunzip uncompress bunzip2 unzip zip compress shellcheck bats`
-  prints nine paths (runtime tools, test-only tools and the linter).
-- **Lesson:** Commands that need a password go in a real terminal.
-
----
-
 ## T-002: bats test fails with `mktemp: command not found`
 
 - **Symptom:** The test for a missing `file` command failed:

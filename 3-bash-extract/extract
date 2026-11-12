@@ -9,6 +9,7 @@ recursive=0
 # --- Supported types: mime type (from `file`) -> how to unpack -------------------
 # To add a method, add one line to one of these tables, and add the type to the
 # "Supported:" line in usage() (that list is written by hand, see D-002).
+# Optional for a stream tool: add its suffix to output_name (else: <name>.out).
 # declare -A = associative array (keys are strings). -g = global, so the tables
 # stay global even when this file is sourced from inside a function (tests).
 
@@ -38,6 +39,33 @@ unpack_zip() {
 # -L: follow a symlink and report the type of the file it points to (D-006).
 detect_type() {
     file -L -b --mime-type -- "$1"
+}
+
+# Print the output path for a stream tool (D-003):
+# remove a .gz / .bz2 / .Z suffix; if there is none, add .out.
+# The suffix only chooses the name. The type was already found by detect_type.
+output_name() {
+    local path="$1"
+    local base=""
+
+    # ${path%.gz} = $path without ".gz" at the end
+    case "$path" in
+        *.gz)  base="${path%.gz}" ;;
+        *.bz2) base="${path%.bz2}" ;;
+        *.Z)   base="${path%.Z}" ;;
+    esac
+
+    # ${base##*/} = the last part of the path (everything after the last "/").
+    local name="${base##*/}"
+
+    # No known suffix, or no real file name left after removing it:
+    # ".gz" -> "", "dir/.gz" -> "", "..gz" -> "." (this folder), "...gz" -> ".." (parent).
+    # printf, not echo: echo would read a name like "-n" as an option.
+    if [[ -z "$name" || "$name" == "." || "$name" == ".." ]]; then
+        printf '%s\n' "$path.out"
+    else
+        printf '%s\n' "$base"
+    fi
 }
 
 usage() {
