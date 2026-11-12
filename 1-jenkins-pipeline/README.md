@@ -39,13 +39,14 @@ Pipeline stages (`Jenkinsfile`):
 - Docker Engine / Docker Desktop with Docker Compose v2 (tested: Docker 29.9.3, Compose v5.7.0
   on Windows 11 + WSL2 Ubuntu 24.04)
 - About 4.5 GB of free memory for the containers (Nexus 2 GB, Jenkins 1 GB, agent 1 GB, smee 128 MB)
-- `bash`, `curl`, `openssl`, `ssh-keygen`
+- `bash`, `git`, `curl`, `openssl`, `ssh-keygen`, `unzip` (only for the manifest check)
 - A GitHub account and a **public** fork of this repository (Jenkins reads the Jenkinsfile and the
   shared library from it, and GitHub sends the webhook from it)
 
 ## Quick start
 
-All commands run from `1-jenkins-pipeline/` in your clone of your fork.
+All commands run from `1-jenkins-pipeline/` in your clone of your fork. Replace `YOUR-USER`
+with your GitHub user name.
 
 **1. Create `.env` with random passwords**
 
@@ -54,7 +55,7 @@ cp .env.example .env
 for v in NEXUS_ADMIN_PASSWORD NEXUS_DEPLOY_PASSWORD JENKINS_ADMIN_PASSWORD GWT_TOKEN; do
   sed -i "s|^$v=.*|$v=$(openssl rand -hex 16)|" .env
 done
-sed -i "s|^GIT_REPO_URL=.*|GIT_REPO_URL=https://github.com/<your-user>/tase-devops-assignment.git|" .env
+sed -i "s|^GIT_REPO_URL=.*|GIT_REPO_URL=https://github.com/YOUR-USER/tase-devops-assignment.git|" .env
 ```
 
 Nexus Community Edition needs its EULA accepted before it accepts uploads. Read
@@ -88,9 +89,10 @@ docker compose up -d --build
 ./nexus/setup.sh
 ```
 
-`setup.sh` first checks every value in `.env`, then waits for Nexus (the first start takes about
-4 minutes), replaces the random admin password, accepts the EULA (only if you set it to `true`)
-and creates the least-privilege deploy user. It is safe to run again.
+`setup.sh` first checks every value in `.env` and stops with a clear message if one is missing or
+still a placeholder. It does not continue unless `NEXUS_ACCEPT_EULA=true`. Then it waits for Nexus
+(the first start takes 2-4 minutes), replaces the random admin password, accepts the EULA and
+creates the least-privilege deploy user. It is safe to run again.
 
 **5. Trigger the pipeline**
 
@@ -117,10 +119,11 @@ Jenkins: <http://localhost:8080>, user `admin`, password = `JENKINS_ADMIN_PASSWO
 SCM values inside the uploaded jar (replace `<build>`):
 
 ```bash
-set -a; source .env; set +a
-curl -s -u "$NEXUS_DEPLOY_USER:$NEXUS_DEPLOY_PASSWORD" -o /tmp/hello-app.jar \
-  http://localhost:8081/repository/maven-releases/com/example/hello-app/1.0.<build>/hello-app-1.0.<build>.jar
-unzip -p /tmp/hello-app.jar META-INF/MANIFEST.MF
+B=2   # the build number to check
+( set -a; source .env; set +a      # in a subshell: the secrets do not stay in your shell
+  curl -fsS -u "$NEXUS_DEPLOY_USER:$NEXUS_DEPLOY_PASSWORD" -o /tmp/hello-app.jar \
+    "http://localhost:8081/repository/maven-releases/com/example/hello-app/1.0.$B/hello-app-1.0.$B.jar" ) \
+  && unzip -p /tmp/hello-app.jar META-INF/MANIFEST.MF
 # expected: SCM-Branch: main, SCM-Commit: <sha>, SCM-Committer: <name>, SCM-Pusher: <user>, ...
 ```
 
@@ -188,7 +191,9 @@ See [DECISIONS.md](DECISIONS.md). Key points:
 - **No secrets in git.** All passwords, the webhook token and the smee URL are in `.env`
   (git-ignored); the SSH key is in `secrets/` (git-ignored).
 - **Secrets as files.** Jenkins and smee get them as Docker secrets in `/run/secrets/`; JCasC reads
-  them with `${readFile:...}`. They are not visible in `docker inspect`.
+  them with `${readFile:...}`. They are not visible in `docker inspect`. Exception: the smee client
+  receives the channel URL and the webhook token as arguments and prints both in its log
+  (`docker compose logs smee`), so anyone with Docker access on this machine can read them (D-002).
 - **Least privilege.** Nexus deploy user can only read and upload to `maven-releases` (D-011).
   Jenkins and Nexus require a login (no anonymous access). Builds run on the agent, not on the
   controller. Jenkins, Nexus and smee run as non-root users; in the agent container only
