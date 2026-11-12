@@ -388,8 +388,10 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Decision — Nexus user:** a dedicated deploy user, not `admin` (least privilege).
   - `nexus/setup.sh` (bash + `curl` to the Nexus REST API) runs once after Nexus starts:
     1. Changes the initial random admin password (`/nexus-data/admin.password`) to the one in `.env`.
-    2. Creates a role with only the privileges needed to deploy to `maven-releases`
-       (exact minimal set verified in chunk C4 — docs and community answers disagree).
+    2. Creates a role with only the privileges needed to deploy to `maven-releases`.
+       Verified in C4: `nx-repository-view-maven2-maven-releases-read`, `-add` and `-edit`.
+       With only `read` + `add`, even the first upload returned 403 (T-004). No delete, no admin
+       privileges, no other repository: an upload to `maven-snapshots` returns 403.
     3. Creates the deploy user with that role.
   - The script is idempotent (safe to run twice) and checked with `shellcheck`.
 - **Decision — password to Maven:**
@@ -443,9 +445,13 @@ Each significant decision gets one entry. Newest at the bottom.
     3.98, if telemetry reporting fails for 30 days, Nexus becomes read-only. Not an issue for a
     short-lived demo; noted in the README.
 - **Decision — EULA:** accepting a license is a legal choice of the person running the demo, so it
-  is never accepted on their behalf. Planned for chunk C4: `nexus/setup.sh` will accept it only
-  if `.env` has `NEXUS_ACCEPT_EULA=true`, otherwise stop with a message and the EULA link;
-  `.env.example` will ship `NEXUS_ACCEPT_EULA=false` (same pattern as `ACCEPT_EULA` in other images).
+  is never accepted on their behalf. Implemented in C4: `nexus/setup.sh` accepts it only if `.env`
+  has `NEXUS_ACCEPT_EULA=true`, otherwise it stops with a message and the EULA link, before any
+  change to Nexus. After accepting, it reads the status again and fails if it is not `true`.
+  `.env.example` ships `NEXUS_ACCEPT_EULA=false` (same pattern as `ACCEPT_EULA` in other images).
+- **Anonymous access:** already disabled by default in 3.98.1 (verified:
+  `GET /service/rest/v1/security/anonymous` returns `"enabled" : false`). Left at the default;
+  the setup script does not change it. Every request to Nexus needs a login.
 - **Risks:** 1 GB heap is below Sonatype's sizing for real workloads; fine for one demo repo.
 - **Sources:**
   - https://github.com/sonatype/docker-nexus3

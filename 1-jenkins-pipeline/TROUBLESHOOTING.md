@@ -58,3 +58,31 @@ Real problems I hit while building this, and how I solved them.
   ```
 - **Lesson:** "healthy" means the server is up, not that it is ready for our use case; test the
   real action (an upload) early.
+
+---
+
+## T-003: `curl: option -K: error encountered when reading a file`
+
+- **Symptom:** every API call in `nexus/setup.sh` failed with exit code 26:
+  ```
+  curl: option -K: error encountered when reading a file
+  ```
+- **Root cause:** the credentials were passed as `-K <(printf ...)` inside an array assignment
+  (`local args=(... -K <(...))`), and curl ran on a later line. Bash closes the file that `<(...)`
+  creates as soon as the command that created it ends, so curl got the name of a file that no
+  longer existed.
+- **Fix:** put `-K <(printf ...)` directly on the `curl` line.
+- **How to verify:** `./nexus/setup.sh` prints `Admin password changed.` (or `already set.`).
+- **Lesson:** a process substitution lives only for the command it is written in.
+
+---
+
+## T-004: Deploy user gets 403 on its first upload
+
+- **Symptom:** a role with `nx-repository-view-maven2-maven-releases-read` and `-add` was not enough.
+  An upload of a new file to `maven-releases` as the deploy user returned `403` with no body.
+- **Root cause:** Nexus checks the `edit` action as well when a file is written, also for a new path.
+- **Fix:** added `nx-repository-view-maven2-maven-releases-edit` to the role (D-011).
+- **How to verify:** upload a new file to `maven-releases` as the deploy user → `201`; the same
+  file again → `409` (release repository: no redeploy); upload to `maven-snapshots` → `403`.
+- **Lesson:** start from the smallest privilege set and test it with the real action.
