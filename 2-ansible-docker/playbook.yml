@@ -17,8 +17,10 @@
       ansible.builtin.assert:
         that: docker_info.rc == 0
         fail_msg: >-
-          Docker is not reachable (docker info failed). Start Docker Desktop (or the Docker
-          daemon) and run the playbook again. Error: {{ docker_info.stderr | default('') }}
+          Docker is not reachable (docker info failed). Check that Docker Desktop (or the
+          Docker daemon) is running, that the docker CLI is installed and on PATH, and that
+          your user may use Docker (docker group). Error:
+          {{ docker_info.stderr | default(docker_info.msg, true) | default('', true) }}
         quiet: true
 
     - name: Create the app folders
@@ -54,7 +56,8 @@
         wait: true
         wait_timeout: "{{ compose_wait_timeout }}"
 
-    # Self-check (N-3): two requests must show the counter going up by exactly 1.
+    # Self-check (N-3): the second request must show a higher count than the first.
+    # "Higher", not "exactly +1": someone else may open the page between the two requests.
     # Note: this adds 2 hits on every run (D-008).
     - name: Request the page (first time)
       ansible.builtin.uri:
@@ -72,13 +75,15 @@
 
     - name: Read the hit count from both pages
       ansible.builtin.set_fact:
-        first_count: "{{ first_page.content | regex_search('Page views: (\\d+)', '\\1') | first | int }}"
-        second_count: "{{ second_page.content | regex_search('Page views: (\\d+)', '\\1') | first | int }}"
+        # default(['-1']): if the text is missing, the assert below fails with a clear message.
+        first_count: "{{ first_page.content | regex_search('Page views: (\\d+)', '\\1') | default(['-1'], true) | first | int }}"
+        second_count: "{{ second_page.content | regex_search('Page views: (\\d+)', '\\1') | default(['-1'], true) | first | int }}"
 
     - name: Check the page and the counter
       ansible.builtin.assert:
         that:
           - "'Hello World' in second_page.content"
-          - second_count | int == first_count | int + 1
-        fail_msg: "Counter did not increase by 1 ({{ first_count }} -> {{ second_count }})."
+          - first_count | int >= 0
+          - second_count | int > first_count | int
+        fail_msg: "Page or counter check failed (hit count {{ first_count }} -> {{ second_count }}, -1 = not found)."
         success_msg: "OK: Hello World is served, hit count {{ first_count }} -> {{ second_count }}."
