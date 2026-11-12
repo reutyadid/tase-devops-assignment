@@ -94,20 +94,41 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Details:**
   - Trigger defined in Job DSL (JCasC), not in the Jenkinsfile. A trigger in the Jenkinsfile is
     registered only after the first manual run.
-  - Filter: only `refs/heads/main` (`regexpFilterText` / `regexpFilterExpression`).
-  - Token stored as a Jenkins credential (`tokenCredentialId`), value from `.env`.
-  - `prepareEnv` falls back to git (`git log -1`) when the build is started manually.
+  - Filter: `regexpFilterText: '$WEBHOOK_REF $WEBHOOK_AFTER'` must match
+    `^refs/heads/main (?!0{40})[0-9a-f]{40}$`: only pushes to `main`, and not a branch deletion
+    (GitHub sends `after` = 40 zeros and no `head_commit` for a deletion).
+  - Token: Secret text credential `gwt-token` (`tokenCredentialId`), value from `.env` as a
+    Docker secret. smee-client reads it, and the channel URL, from Docker secret files at start
+    and puts the token in the target URL (`?token=...`). Neither value is in `docker inspect`.
+  - `printPostContent(false)`: the raw payload is not written to the build log.
+  - `prepareEnv` falls back to git when the build is started manually.
+  - smee-client: small image `node:24.22-alpine3.24` + `smee-client@5.0.0` (pinned), runs as the
+    `node` user, `mem_limit: 128m`, no published port.
+- **Verified:**
+  - Simulated payloads posted inside the network: wrong token → no job found; push to another
+    branch → not triggered; `after` = zeros on `main` → not triggered; push to `main` → build #4,
+    `prepareEnv - source: webhook`.
+  - Real GitHub push → smee → Jenkins: build #5, cause `Push to main by reutyadid`,
+    `SCM_PUSHER=reutyadid`, `hello-app-1.0.5.jar` in Nexus. GitHub's `ping` event on webhook
+    creation was received (HTTP 200) and did not start a build.
 - **Security:**
   - Token-triggered builds run with SYSTEM privileges (documented by the plugin). Acceptable:
     the Jenkinsfile comes from my own repo.
-  - The smee channel URL acts like a password: anyone who knows it can post a fake payload, and
-    smee-client forwards it with the token. The URL is kept in `.env`, never committed.
+  - The smee channel URL acts like a password: anyone who knows it can read the webhooks and post
+    a fake payload, and smee-client forwards it with the token. A fake payload can name any real
+    commit of `main` (it passes the filter) and any committer / pusher name, so the build would
+    deploy a jar with false `SCM-*` values. The URL is kept in `.env`, never committed. The token
+    also appears in the smee client's own log line ("Forwarding ... ?token=...") on this machine.
   - smee.io is for development only. In production: a real inbound endpoint (reverse proxy /
-    TLS) and HMAC verification of `X-Hub-Signature-256`.
+    TLS) and HMAC verification of `X-Hub-Signature-256`, so a payload that GitHub did not sign
+    is rejected.
 - **Trade-offs:** Depends on a public third-party relay (smee.io) being available.
 - **Sources:**
   - https://plugins.jenkins.io/generic-webhook-trigger/
+  - https://docs.github.com/en/webhooks/webhook-events-and-payloads#push
   - https://docs.github.com/en/webhooks/testing-webhooks
+  - https://github.com/probot/smee-client (smee-client, npm package `smee-client`)
+  - https://hub.docker.com/_/node (official Node.js image, Alpine variant)
 
 ---
 
@@ -148,14 +169,16 @@ Each significant decision gets one entry. Newest at the bottom.
   | `SCM_REPO`      | `$.repository.full_name`         | `WEBHOOK_REPO`      | `GIT_URL` (owner/name)         |
   | `SCM_MESSAGE`   | `$.head_commit.message`          | `WEBHOOK_MESSAGE`   | `git log -1 --format=%s`       |
 
-  - `WEBHOOK_*` variables: set by Generic Webhook Trigger once it is added to the job (planned for
-    the trigger chunk, D-002). Until then every run uses the git fallback. If `WEBHOOK_AFTER` is
-    empty, the run was not started by the webhook.
-  - Planned with the trigger: fail the build if the checked-out `GIT_COMMIT` differs from
-    `WEBHOOK_AFTER` (a newer push moved `main` before this build started), so the manifest never
-    names a commit that was not built; and ignore branch-deletion pushes (`after` = all zeros).
-  - `GIT_COMMIT` / `GIT_BRANCH` / `GIT_URL` come from the checkout (the workspace is on a detached
-    HEAD, so `git rev-parse --abbrev-ref HEAD` would only print `HEAD`).
+  - `WEBHOOK_*` variables: set by Generic Webhook Trigger from the push payload (Job DSL,
+    D-002). If `WEBHOOK_AFTER` is empty, the run was not started by the webhook.
+  - The Jenkinsfile turns off the automatic checkout (`skipDefaultCheckout()`) and checks out in
+    the Prepare stage: `WEBHOOK_AFTER` on a webhook run, `*/main` on a manual run. So each build
+    builds exactly the commit it reports, even if a newer push moved `main` meanwhile. The
+    `checkout` step returns `GIT_COMMIT` / `GIT_BRANCH` / `GIT_URL`, which are passed to
+    `prepareEnv(gitVars)` for the manual-run fallback. (The Jenkinsfile itself is always read
+    from the head of `main`.)
+  - `GIT_BRANCH` comes from the checkout result (the workspace is on a detached HEAD, so
+    `git rev-parse --abbrev-ref HEAD` would only print `HEAD`).
   - `prepareEnv` fails the build if `SCM_COMMIT` or `SCM_COMMITTER` is empty.
   - All 7 are printed in the Prepare stage log.
   - 6 are embedded in `MANIFEST.MF` (all except `SCM_MESSAGE`: free text, can be multi-line).

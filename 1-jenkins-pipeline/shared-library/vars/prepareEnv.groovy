@@ -6,7 +6,9 @@
 //
 // Every value is untrusted data from the SCM. It is only stored in env vars and printed with
 // `echo`; it is never put into a Groovy-interpolated shell string (D-001).
-def call() {
+//
+// gitVars: the map returned by the `checkout` step (GIT_COMMIT, GIT_BRANCH, GIT_URL).
+def call(Map gitVars) {
     boolean fromWebhook = env.WEBHOOK_AFTER?.trim()
 
     Map scm
@@ -22,22 +24,14 @@ def call() {
         ]
     } else {
         scm = [
-            // GIT_COMMIT / GIT_BRANCH / GIT_URL are set by the checkout of the Jenkinsfile's repo.
-            SCM_BRANCH   : env.GIT_BRANCH?.replaceFirst('^origin/', ''),
-            SCM_COMMIT   : env.GIT_COMMIT,
+            SCM_BRANCH   : gitVars.GIT_BRANCH?.replaceFirst('^origin/', ''),
+            SCM_COMMIT   : gitVars.GIT_COMMIT,
             SCM_COMMITTER: sh(script: 'git log -1 --format=%cn', returnStdout: true).trim(),
             SCM_AUTHOR   : sh(script: 'git log -1 --format=%an', returnStdout: true).trim(),
             SCM_PUSHER   : 'manual',
-            SCM_REPO     : env.GIT_URL?.replaceFirst('^https://[^/]+/', '')?.replaceFirst('\\.git$', ''),
+            SCM_REPO     : gitVars.GIT_URL?.replaceFirst('^https://[^/]+/', '')?.replaceFirst('\\.git$', ''),
             SCM_MESSAGE  : sh(script: 'git log -1 --format=%s', returnStdout: true).trim(),
         ]
-    }
-
-    // The job checks out the head of main when the build starts. If a newer push moved main
-    // in the meantime, this build would build a different commit than the webhook names.
-    // Stop instead of writing a wrong commit into the manifest; the newer push has its own build.
-    if (fromWebhook && env.GIT_COMMIT != scm.SCM_COMMIT) {
-        error("prepareEnv: webhook commit ${scm.SCM_COMMIT} is not the checked-out commit ${env.GIT_COMMIT}")
     }
 
     // Without these two, the build cannot say what was built or who committed it (R-8).

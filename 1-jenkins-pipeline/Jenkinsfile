@@ -7,6 +7,8 @@ pipeline {
     agent { label 'maven' }
 
     options {
+        // Checkout is done in Prepare, so a webhook build gets exactly the pushed commit.
+        skipDefaultCheckout()
         disableConcurrentBuilds()
         timeout(time: 15, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -22,7 +24,13 @@ pipeline {
     stages {
         stage('Prepare') {
             steps {
-                prepareEnv()
+                script {
+                    // Webhook run: the commit GitHub sent (WEBHOOK_AFTER), even if main has moved
+                    // since. Manual run: the head of main.
+                    def gitVars = checkout scmGit(branches: [[name: env.WEBHOOK_AFTER ?: '*/main']],
+                                                  userRemoteConfigs: scm.userRemoteConfigs)
+                    prepareEnv(gitVars)
+                }
             }
         }
 

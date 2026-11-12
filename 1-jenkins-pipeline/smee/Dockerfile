@@ -5,4 +5,6 @@ FROM node:24.22-alpine3.24
 RUN npm install --global smee-client@5.0.0 && npm cache clean --force
 
 USER node
-ENTRYPOINT ["smee"]
+# Channel URL and token are read from Docker secret files at start, so they are not in the
+# container config (`docker inspect`). SMEE_TARGET is the Jenkins endpoint, not a secret.
+ENTRYPOINT ["/bin/sh", "-c", "exec smee --url \"$(cat /run/secrets/smee_url)\" --target \"$SMEE_TARGET?token=$(cat /run/secrets/gwt_token)\""]
