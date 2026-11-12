@@ -48,6 +48,10 @@ Each significant decision gets one entry. Newest at the bottom.
   - A `trap ... EXIT` removes leftover temp files/dirs if the script stops (e.g. Ctrl+C).
     The temp variable is reset after each successful `mv`.
   - Temp dirs are removed with `rm -rf -- "${tmpdir:?}"` (fails if the variable is empty).
+  - Adding a method = one table line + the type name in the `Supported:` line of
+    `usage()`. That help line is written by hand (not generated from the tables),
+    because the key order of an associative array is not fixed and a readable,
+    stable help text is worth one extra edit.
 - **Why:** `>` empties the target before the tool runs, so a corrupt archive would destroy
   an existing good file. Writing to a temp file and renaming only on success prevents this.
   `mv` inside the same folder is a rename, so it is atomic.
@@ -292,8 +296,10 @@ Each significant decision gets one entry. Newest at the bottom.
   3. Manual commands in README only — no automation; rejected.
 - **Decision:** bats-core, installed from apt (`bats` 1.10.0 on Ubuntu 24.04), without the
   helper libraries (`bats-assert`, `bats-support`). Fixtures are generated at test time
-  with misleading names (nothing binary is committed). `shellcheck` runs on the script and
-  the tests.
+  with misleading names (nothing binary is committed). Each test creates its own fixtures
+  in its own `$BATS_TEST_TMPDIR` (in `setup`/per test, not once in `setup_file`), so a test
+  that extracts or overwrites files cannot affect another test. `shellcheck` runs on the
+  script and the tests.
 - **Why:** Industry standard for testing shell scripts; readable tests.
 - **Trade-offs:** One more dependency; must understand how `run` works.
 - **Open:** GitHub Actions (shellcheck + bats on push) — to be decided at the end.

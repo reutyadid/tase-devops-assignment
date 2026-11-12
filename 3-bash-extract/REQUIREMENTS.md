@@ -35,12 +35,12 @@ Status values: `Planned` → `In progress` → `Done`.
 |-----|---------------------------------------------------------|--------------------------------------------------|--------------|------------------------------------------|---------|
 | R1  | Script named `extract`                                  | `3-bash-extract/extract`                         | —            | all tests run `tests/../extract`         | Done    |
 | R2  | Synopsis: `extract [-h] [-r] [-v] file [file...]`       | `parse_args` (`getopts ":hrv"`), `usage()`       | D-010        | usage / flag tests                       | In progress |
-| R3  | Detect the type only via `file` (names have no meaning) | `file -b --mime-type --`                         | D-001        | fixtures with misleading names           | Planned |
+| R3  | Detect the type only via `file` (names have no meaning) | `file -b --mime-type --`                         | D-001        | fixtures with misleading names           | In progress |
 | R4  | Invoke the right decompression command automatically   | `STREAM_TOOLS` / `ARCHIVE_TOOLS` lookup          | D-001, D-002 | one test per method                      | Planned |
 | R5  | Put extracted files in the same folder                  | temp file / temp dir in the target's own folder  | D-002, D-003 | output location tests                    | Planned |
 | R6  | Overwrite files with the same name                      | `mv -f` / `cp -af`                               | D-005        | run twice, existing file is replaced     | Planned |
-| R7  | Support gunzip, bunzip2, unzip, uncompress              | 4 table entries (+ `application/x-gzip` alias)   | D-001, D-011 | gz / bz2 / zip / Z fixtures              | Planned |
-| R8  | Adding a method must be VERY simple                     | one line in a table                              | D-002        | README shows how                         | Planned |
+| R7  | Support gunzip, bunzip2, unzip, uncompress              | 4 table entries (+ `application/x-gzip` alias)   | D-001, D-011 | gz / bz2 / zip / Z fixtures              | In progress |
+| R8  | Adding a method must be VERY simple                     | one line in a table + the `Supported:` help line | D-002        | README shows how                         | In progress |
 | R9  | Not compressed → no other action on that file           | not in a table → count only, file untouched      | D-007        | plain file is unchanged                  | Planned |
 | R10 | Directory → decompress all files in it                  | `process_dir` (`find -maxdepth 1`)               | D-006        | folder without `-r`                      | Planned |
 | R11 | Echo the number of archives decompressed                | `decompressed` counter + final echo              | D-007        | stdout checked in tests                  | Planned |

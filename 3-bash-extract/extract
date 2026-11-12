@@ -6,6 +6,40 @@
 verbose=0
 recursive=0
 
+# --- Supported types: mime type (from `file`) -> how to unpack -------------------
+# To add a method, add one line to one of these tables, and add the type to the
+# "Supported:" line in usage() (that list is written by hand, see D-002).
+# declare -A = associative array (keys are strings). -g = global, so the tables
+# stay global even when this file is sourced from inside a function (tests).
+
+# Stream tools: one file in -> one file out. Value = a tool that supports -c (stdout).
+# TEMPORARY: used from chunk 4 on. Remove this line then.
+# shellcheck disable=SC2034
+declare -gA STREAM_TOOLS=(
+    [application/gzip]="gunzip"
+    [application/x-gzip]="gunzip"          # older versions of `file`
+    [application/x-bzip2]="bunzip2"
+    [application/x-compress]="uncompress"
+)
+
+# Archive tools: one file in -> many files out. Value = a function below
+# that takes: $1 = archive, $2 = folder to extract into.
+# TEMPORARY: used from chunk 5 on. Remove this line then.
+# shellcheck disable=SC2034
+declare -gA ARCHIVE_TOOLS=(
+    [application/zip]="unpack_zip"
+)
+
+unpack_zip() {
+    unzip -o -q "$1" -d "$2"
+}
+
+# Print the mime type of a file, based on its content (never its name).
+# -L: follow a symlink and report the type of the file it points to (D-006).
+detect_type() {
+    file -L -b --mime-type -- "$1"
+}
+
 usage() {
     cat <<'EOF'
 Usage: extract [-h] [-r] [-v] file [file...]

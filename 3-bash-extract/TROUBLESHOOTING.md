@@ -63,3 +63,36 @@ Real problems I hit while building this, and how I solved them.
   → no output, exit 0 (also when run from inside `3-bash-extract/`).
 - **Lesson:** Disable a ShellCheck rule only with a comment that says why, and as narrowly
   as possible.
+
+---
+
+## T-004: `compress` fails in the test fixtures with exit code 2
+
+- **Symptom:** All tests that create fixtures failed:
+  ```
+  `make_fixtures' failed with status 2
+  ```
+- **Root cause:** `compress` returns 2 when the output is larger than the input
+  ("if the last file is larger after (attempted) compression, the status is 2").
+  A 6-byte "hello" file grows to 10 bytes. bats treats any non-zero status as a failure.
+- **Fix:** `compress -f` (force) in `make_fixtures`. The output is a valid
+  `application/x-compress` file either way.
+- **How to verify:** `printf 'hello\n' | compress -f > /dev/null; echo $?` → `0`.
+- **Lesson:** Read the EXIT STATUS section of a tool's man page before relying on `$?`.
+
+---
+
+## T-005: Associative arrays disappear when the script is sourced from a function
+
+- **Symptom (found before it broke a test):** loading the script through a helper
+  function (`load_extract`) would leave `STREAM_TOOLS` / `ARCHIVE_TOOLS` empty:
+  ```
+  $ bash -c 'f() { declare -A T=([a]=1); }; f; echo "${T[a]:-<gone>}"'
+  <gone>
+  ```
+- **Root cause:** `declare` inside a function creates a **local** variable. `source`
+  runs the file's top-level code inside the calling function, so the tables became
+  local to `load_extract` and were removed when it returned.
+- **Fix:** `declare -gA` (`-g` = global) for both tables.
+- **How to verify:** `bats 3-bash-extract/tests` → the `tables:` tests pass.
+- **Lesson:** Code that may be sourced should declare its globals with `-g`.
