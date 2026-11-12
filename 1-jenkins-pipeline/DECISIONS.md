@@ -116,7 +116,7 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Date:** 2026-11-10
 - **Context:** Three phrases in the task text can be read in more than one way (R-3, R-4, R-5, R-8).
 - **Decision:**
-  1. "build an artifact" = compile + run unit tests (`mvnw compile test`).
+  1. "build an artifact" = compile + run unit tests (`mvnw clean test`; `clean` so every build starts from an empty `target/`).
      "pack the artifact" = create the jar (`mvnw package`).
   2. "upload to repo" = an artifact repository (Nexus, hosted Maven repo `maven-releases`),
      not a git repository.
@@ -138,16 +138,25 @@ Each significant decision gets one entry. Newest at the bottom.
   We need a small, standard set that answers: what was built, from where, by whom.
 - **Decision:** `prepareEnv` sets 7 environment variables:
 
-  | Env var         | Push payload (JSONPath)          | Git fallback (manual run)         |
-  |-----------------|----------------------------------|-----------------------------------|
-  | `SCM_BRANCH`    | `$.ref` (strip `refs/heads/`)    | `git rev-parse --abbrev-ref HEAD` |
-  | `SCM_COMMIT`    | `$.after`                        | `git rev-parse HEAD`              |
-  | `SCM_COMMITTER` | `$.head_commit.committer.name`   | `git log -1 --format=%cn`         |
-  | `SCM_AUTHOR`    | `$.head_commit.author.name`      | `git log -1 --format=%an`         |
-  | `SCM_PUSHER`    | `$.pusher.name`                  | `manual`                          |
-  | `SCM_REPO`      | `$.repository.full_name`         | from the remote URL               |
-  | `SCM_MESSAGE`   | `$.head_commit.message`          | `git log -1 --format=%s`          |
+  | Env var         | Push payload (JSONPath)          | Webhook env var     | Git fallback (manual run)      |
+  |-----------------|----------------------------------|---------------------|--------------------------------|
+  | `SCM_BRANCH`    | `$.ref` (strip `refs/heads/`)    | `WEBHOOK_REF`       | `GIT_BRANCH` (strip `origin/`) |
+  | `SCM_COMMIT`    | `$.after`                        | `WEBHOOK_AFTER`     | `GIT_COMMIT`                   |
+  | `SCM_COMMITTER` | `$.head_commit.committer.name`   | `WEBHOOK_COMMITTER` | `git log -1 --format=%cn`      |
+  | `SCM_AUTHOR`    | `$.head_commit.author.name`      | `WEBHOOK_AUTHOR`    | `git log -1 --format=%an`      |
+  | `SCM_PUSHER`    | `$.pusher.name`                  | `WEBHOOK_PUSHER`    | `manual`                       |
+  | `SCM_REPO`      | `$.repository.full_name`         | `WEBHOOK_REPO`      | `GIT_URL` (owner/name)         |
+  | `SCM_MESSAGE`   | `$.head_commit.message`          | `WEBHOOK_MESSAGE`   | `git log -1 --format=%s`       |
 
+  - `WEBHOOK_*` variables: set by Generic Webhook Trigger once it is added to the job (planned for
+    the trigger chunk, D-002). Until then every run uses the git fallback. If `WEBHOOK_AFTER` is
+    empty, the run was not started by the webhook.
+  - Planned with the trigger: fail the build if the checked-out `GIT_COMMIT` differs from
+    `WEBHOOK_AFTER` (a newer push moved `main` before this build started), so the manifest never
+    names a commit that was not built; and ignore branch-deletion pushes (`after` = all zeros).
+  - `GIT_COMMIT` / `GIT_BRANCH` / `GIT_URL` come from the checkout (the workspace is on a detached
+    HEAD, so `git rev-parse --abbrev-ref HEAD` would only print `HEAD`).
+  - `prepareEnv` fails the build if `SCM_COMMIT` or `SCM_COMMITTER` is empty.
   - All 7 are printed in the Prepare stage log.
   - 6 are embedded in `MANIFEST.MF` (all except `SCM_MESSAGE`: free text, can be multi-line).
     Maven reads them as `${env.SCM_*}`. In a local build without these env vars the literal

@@ -22,9 +22,9 @@ def call() {
         ]
     } else {
         scm = [
-            // GIT_BRANCH / GIT_URL are set by the checkout of the Jenkinsfile's repo.
+            // GIT_COMMIT / GIT_BRANCH / GIT_URL are set by the checkout of the Jenkinsfile's repo.
             SCM_BRANCH   : env.GIT_BRANCH?.replaceFirst('^origin/', ''),
-            SCM_COMMIT   : sh(script: 'git log -1 --format=%H', returnStdout: true).trim(),
+            SCM_COMMIT   : env.GIT_COMMIT,
             SCM_COMMITTER: sh(script: 'git log -1 --format=%cn', returnStdout: true).trim(),
             SCM_AUTHOR   : sh(script: 'git log -1 --format=%an', returnStdout: true).trim(),
             SCM_PUSHER   : 'manual',
