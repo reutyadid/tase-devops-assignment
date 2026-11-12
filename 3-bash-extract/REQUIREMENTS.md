@@ -33,8 +33,8 @@ Status values: `Planned` → `In progress` → `Done`.
 
 | ID  | Requirement (from the assignment)                       | Implementation (planned)                         | Decision     | Test (bats)                              | Status  |
 |-----|---------------------------------------------------------|--------------------------------------------------|--------------|------------------------------------------|---------|
-| R1  | Script named `extract`                                  | `3-bash-extract/extract`                         | —            | all tests call `./extract`               | Planned |
-| R2  | Synopsis: `extract [-h] [-r] [-v] file [file...]`       | `getopts ":hrv"`, `usage()`                      | D-010        | usage / flag tests                       | Planned |
+| R1  | Script named `extract`                                  | `3-bash-extract/extract`                         | —            | all tests run `tests/../extract`         | Done    |
+| R2  | Synopsis: `extract [-h] [-r] [-v] file [file...]`       | `parse_args` (`getopts ":hrv"`), `usage()`       | D-010        | usage / flag tests                       | In progress |
 | R3  | Detect the type only via `file` (names have no meaning) | `file -b --mime-type --`                         | D-001        | fixtures with misleading names           | Planned |
 | R4  | Invoke the right decompression command automatically   | `STREAM_TOOLS` / `ARCHIVE_TOOLS` lookup          | D-001, D-002 | one test per method                      | Planned |
 | R5  | Put extracted files in the same folder                  | temp file / temp dir in the target's own folder  | D-002, D-003 | output location tests                    | Planned |
@@ -47,7 +47,7 @@ Status values: `Planned` → `In progress` → `Done`.
 | R12 | Return the number of files NOT decompressed             | `not_decompressed` counter, capped at 255        | D-007, D-008 | exit code checked; cap test              | Planned |
 | R13 | `-v`: echo each decompressed, warn each NOT decompressed | `verbose` flag, warnings to stderr              | D-007        | `-v` output tests                        | Planned |
 | R14 | `-r`: traverse folders recursively                      | `find` without `-maxdepth` + nested archives     | D-006, D-009 | nested folders / archives, depth limit   | Planned |
-| R15 | `-h`: help notice                                       | `usage()`, exit 0                                | D-010        | `-h` test                                | Planned |
+| R15 | `-h`: help notice                                       | `usage()`, exit 0                                | D-010        | `-h` test                                | Done    |
 
 ## Interpretations of ambiguous points
 

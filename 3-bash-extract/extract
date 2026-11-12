@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# extract - unpack archives by their content type, not by their name.
+# See README.md for usage and DECISIONS.md for design decisions.
+
+# Options (set by parse_args)
+verbose=0
+recursive=0
+
+usage() {
+    cat <<'EOF'
+Usage: extract [-h] [-r] [-v] file [file...]
+
+Unpack archives in place. The type is detected with the `file` command,
+so file names and extensions do not matter.
+
+Supported: gzip (gunzip), bzip2 (bunzip2), zip (unzip), compress (uncompress).
+
+Options:
+  -h    show this help and exit
+  -r    recursive: go into subfolders and into archives inside archives
+  -v    verbose: print each file decompressed, warn for each file that was not
+
+Output:     the number of archives decompressed
+Exit code:  the number of files NOT decompressed (capped at 255), 2 on usage error
+EOF
+}
+
+# Print an error and the usage to stderr, then exit 2 (incorrect usage).
+usage_error() {
+    echo "extract: $1" >&2
+    usage >&2
+    exit 2
+}
+
+# Read the options into the globals above.
+# The caller removes them afterwards with: shift $((OPTIND - 1))
+parse_args() {
+    local opt
+    OPTIND=1   # start from the first argument, even if called before
+
+    # TEMPORARY: verbose/recursive are read from chunk 6 on. Remove this line then.
+    # shellcheck disable=SC2034
+    while getopts ":hrv" opt; do
+        case "$opt" in
+            h) usage; exit 0 ;;
+            r) recursive=1 ;;
+            v) verbose=1 ;;
+            *) usage_error "unknown option: -$OPTARG" ;;
+        esac
+    done
+}
+
+main() {
+    parse_args "$@"
+    shift $((OPTIND - 1))
+
+    if (( $# == 0 )); then
+        usage_error "no files given"
+    fi
+
+    if ! command -v file >/dev/null; then
+        echo "extract: the 'file' command is required but was not found" >&2
+        exit 2
+    fi
+
+    # Processing the files is added in the next chunks.
+}
+
+# Run only when the script is executed, not when it is sourced (for tests).
+# "set" is here so the strict mode does not leak into a shell that sources us.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    set -uo pipefail
+    main "$@"
+fi
