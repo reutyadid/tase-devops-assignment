@@ -20,7 +20,7 @@ PAGE = """<!doctype html>
   <head><title>Hello World</title></head>
   <body>
     <h1>Hello World</h1>
-    <p>This page has been viewed {count} times.</p>
+    <p>Page views: {count}</p>
   </body>
 </html>
 """

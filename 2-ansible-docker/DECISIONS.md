@@ -251,8 +251,7 @@ Each significant decision gets one entry. Newest at the bottom.
 - **Context:** Working rules require pinned versions, least privilege and minimal exposed
   ports (N-5). The host is limited in RAM.
 - **Decision:**
-  - Pinned image tags and package versions (no `latest`). Exact tags are chosen when the
-    Dockerfiles and the Compose template are written.
+  - Pinned image tags and package versions (no `latest`).
   - `web` and `counter` run as a non-root user (`USER` in the Dockerfile) and listen on port
     8000, the gunicorn convention. Docker (20.10+) lets non-root processes in a container
     bind low ports, but a high port also works in runtimes that do not (for example rootless
@@ -264,13 +263,21 @@ Each significant decision gets one entry. Newest at the bottom.
   - Healthchecks on all services; `depends_on` with `condition: service_healthy`
     (start order: `redis` → `counter` → `web`). App healthchecks use `/healthz` (D-002), so
     they do not add hits.
-  - Memory limit on every container. The value is set after measuring real usage with
-    `docker stats` (planned starting point ~128 MB); the measurement is recorded here.
+  - Pinned tags: base image `python:3.12.16-slim-trixie` for `web` and `counter`,
+    `redis:8.10.3-alpine` for Redis (small image, official variant).
+  - Memory limit `mem_limit: 128m` on every container. Measured idle usage with
+    `docker stats --no-stream` (2026-11-12): `web` 64 MiB, `counter` 80 MiB, `redis` 15 MiB.
+    One value for all services keeps it simple; Redis keeps headroom because a background
+    save forks the process.
+  - `restart: unless-stopped` on every service: a crashed or OOM-killed container, and the
+    whole app after a Docker restart, come back on their own. Not required by the task;
+    approved as a one-line resilience default.
   - No `become`/`sudo` in the playbook (D-013).
 - **Why:** Least privilege at every layer with only a few lines of YAML.
 - **Trade-offs:** None significant.
 - **Sources:**
   - https://docs.docker.com/compose/how-tos/startup-order/
+  - https://docs.docker.com/reference/compose-file/services/#restart
   - https://docs.docker.com/reference/compose-file/networks/
   - https://docs.docker.com/engine/security/#docker-daemon-attack-surface
   - https://hub.docker.com/_/redis
