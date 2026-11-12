@@ -10,3 +10,6 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/plugins.txt
 # so a rebuilt image always applies the config from git.
 COPY casc.yaml /usr/share/jenkins/casc.yaml
 ENV CASC_JENKINS_CONFIG=/usr/share/jenkins/casc.yaml
+
+# Job DSL scripts, referenced from the `jobs:` section of casc.yaml.
+COPY jobs/ /usr/share/jenkins/jobs/

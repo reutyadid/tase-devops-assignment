@@ -1,0 +1,58 @@
+// Task 1 pipeline (R-1): SCM change -> Prepare -> Build -> Package -> Upload to Nexus.
+// The shared library is loaded explicitly; prepareEnv() comes from it (R-6, R-7, D-001).
+@Library('tase-shared-lib') _
+
+pipeline {
+    // Builds run only on the dedicated agent, never on the controller (D-005).
+    agent { label 'maven' }
+
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 15, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+    }
+
+    environment {
+        // One version for every Maven call in this build (D-009).
+        REVISION = "1.0.${env.BUILD_NUMBER}"
+    }
+
+    // Shell steps use single quotes: the shell reads $REVISION and SCM_* from the environment,
+    // Groovy does not paste values into the command (D-001).
+    stages {
+        stage('Prepare') {
+            steps {
+                prepareEnv()
+            }
+        }
+
+        stage('Build') {        // compile + unit tests (R-3)
+            steps {
+                dir('1-jenkins-pipeline/app') {
+                    sh './mvnw -B -Drevision="$REVISION" clean test'
+                }
+            }
+        }
+
+        stage('Package') {      // jar with SCM_* in its manifest (R-4, R-8)
+            steps {
+                dir('1-jenkins-pipeline/app') {
+                    sh './mvnw -B -Drevision="$REVISION" -DskipTests package'
+                }
+            }
+        }
+
+        stage('Upload') {       // jar + POM to Nexus maven-releases (R-5)
+            steps {
+                dir('1-jenkins-pipeline/app') {
+                    // Credentials exist only inside this block and are masked in the log (D-011).
+                    withCredentials([usernamePassword(credentialsId: 'nexus-deploy',
+                                                      usernameVariable: 'NEXUS_DEPLOY_USER',
+                                                      passwordVariable: 'NEXUS_DEPLOY_PASSWORD')]) {
+                        sh './mvnw -B -s settings.xml -Drevision="$REVISION" -DskipTests deploy'
+                    }
+                }
+            }
+        }
+    }
+}

@@ -71,3 +71,7 @@ unclassified:
             scm:
               gitSource:
                 remote: "${GIT_REPO_URL}"
+
+# The pipeline job, created by a Job DSL script (D-007).
+jobs:
+  - file: /usr/share/jenkins/jobs/hello_app.groovy
